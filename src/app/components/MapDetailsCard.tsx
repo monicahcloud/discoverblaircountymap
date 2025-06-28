@@ -30,12 +30,20 @@ export function MapDetailsCard({
       </div>
 
       {/* 🔍 Search Input */}
-      <div className="px-4 pt-2">
+      <div className="relative px-4 pt-2">
         <Input
+          className="pr-10"
           placeholder="Search..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
         />
+        {searchQuery && (
+          <button
+            onClick={() => setSearchQuery("")}
+            className="absolute right-6 top-3 text-gray-500 hover:text-gray-800">
+            <X className="w-4 h-4" />
+          </button>
+        )}
       </div>
 
       {/* 📜 Scrollable Content */}

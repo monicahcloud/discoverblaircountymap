@@ -6,6 +6,7 @@ import Map, { Marker, Popup, NavigationControl } from "react-map-gl/mapbox";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { MapDetailsCard } from "./MapDetailsCard";
 import Image from "next/image";
+import Fuse from "fuse.js";
 
 export default function MapWithSearch() {
   const mapRef = useRef<any>(null);
@@ -58,17 +59,27 @@ export default function MapWithSearch() {
   const hasNext = (currentPage + 1) * categoriesPerPage < categories.length;
   const hasPrev = currentPage > 0;
 
+  // 🔍 Fuzzy search instance
+  const fuse = useMemo(() => {
+    return new Fuse(locations, {
+      keys: ["name", "description", "address", "category"],
+      threshold: 0.3,
+    });
+  }, [locations]);
+
   // 🔍 Filter locations by search + category
   const filteredLocations = useMemo(() => {
-    return locations.filter((loc) => {
-      const matchesCategory =
-        selectedCategory === "All" || loc.category === selectedCategory;
-      const matchesSearch = loc.name
-        .toLowerCase()
-        .includes(searchQuery.toLowerCase());
-      return matchesCategory && matchesSearch;
-    });
-  }, [locations, selectedCategory, searchQuery]);
+    const matchesCategory = (loc: any) =>
+      selectedCategory === "All" || loc.category === selectedCategory;
+
+    if (searchQuery.trim() === "") {
+      return locations.filter(matchesCategory);
+    }
+
+    const fuzzyResults = fuse.search(searchQuery.trim());
+    const matchedItems = fuzzyResults.map((result) => result.item);
+    return matchedItems.filter(matchesCategory);
+  }, [fuse, searchQuery, selectedCategory, locations]);
 
   const shareLocation = () => {
     if (selected) {
@@ -124,6 +135,7 @@ export default function MapWithSearch() {
           </button>
         </div>
 
+        {/* 🗺 Map */}
         <Map
           ref={mapRef}
           mapboxAccessToken={process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN}
@@ -136,6 +148,7 @@ export default function MapWithSearch() {
           style={{ width: "100%", height: "100%" }}>
           {/* 🧭 Zoom Control */}
           <NavigationControl position="bottom-right" showCompass={false} />
+
           {/* 📍 Markers */}
           {filteredLocations.map((loc) => (
             <Marker
@@ -148,7 +161,7 @@ export default function MapWithSearch() {
                 setSelected(loc);
               }}>
               <div
-                className="w-12 h-[60px] relative transform hover:scale-110 transition-transform cursor-pointer"
+                className="w-12 h-[60px] relative transform hover:scale-110 transition-transform cursor-pointer border border-white rounded-full overflow-hidden"
                 style={{
                   backgroundColor: pastelColor(loc.category),
                   clipPath:
@@ -176,7 +189,6 @@ export default function MapWithSearch() {
               closeOnClick={false}>
               <div className="text-sm max-w-xs space-y-1">
                 <h3 className="font-bold text-base">{selected.name}</h3>
-                {/* <p className="text-gray-600 text-sm">{selected.description}</p> */}
               </div>
             </Popup>
           )}
