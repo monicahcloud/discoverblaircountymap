@@ -1,4 +1,3 @@
-// app/api/categories/route.ts
 import { NextResponse } from "next/server";
 import { Pool } from "pg";
 
@@ -12,7 +11,9 @@ export async function GET() {
     const result = await pool.query(
       "SELECT DISTINCT category FROM locations ORDER BY category"
     );
-    const categories = result.rows.map((row) => row.category);
+    const categories = result.rows.map(
+      (row: { category: string }) => row.category
+    );
     return NextResponse.json(categories);
   } catch (error) {
     console.error("Failed to fetch categories:", error);
