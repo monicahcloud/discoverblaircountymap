@@ -18,7 +18,6 @@ export default function MapWithSearch() {
   const [currentPage, setCurrentPage] = useState(0);
   const categoriesPerPage = 4;
 
-  // 🎨 Generate soft pastel color from string
   const pastelColor = (str: string) => {
     let hash = 0;
     for (let i = 0; i < str.length; i++) {
@@ -28,7 +27,6 @@ export default function MapWithSearch() {
     return `hsl(${hue}, 70%, 85%)`;
   };
 
-  // 📡 Fetch locations + categories from API
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -59,7 +57,6 @@ export default function MapWithSearch() {
   const hasNext = (currentPage + 1) * categoriesPerPage < categories.length;
   const hasPrev = currentPage > 0;
 
-  // 🔍 Fuzzy search instance
   const fuse = useMemo(() => {
     return new Fuse(locations, {
       keys: ["name", "description", "address", "category"],
@@ -67,7 +64,6 @@ export default function MapWithSearch() {
     });
   }, [locations]);
 
-  // 🔍 Filter locations by search + category
   const filteredLocations = useMemo(() => {
     const matchesCategory = (loc: any) =>
       selectedCategory === "All" || loc.category === selectedCategory;
@@ -96,43 +92,60 @@ export default function MapWithSearch() {
       </h1>
 
       <div className="w-full max-w-6xl h-[600px] relative rounded-xl overflow-hidden shadow-lg">
-        {/* 🔍 Search & Details */}
-        <MapDetailsCard
-          selected={selected}
-          searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
-          shareLocation={shareLocation}
-          clearSelection={() => setSelected(null)}
-        />
+        {/* 🔍 Search & Details Card (Desktop Only) */}
+        <div className="hidden sm:block">
+          <MapDetailsCard
+            selected={selected}
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            shareLocation={shareLocation}
+            clearSelection={() => setSelected(null)}
+          />
+        </div>
 
-        {/* 🎯 Category Filter */}
-        <div className="absolute top-4 right-4 z-10 flex items-center gap-2 p-2 rounded-md shadow-md bg-white bg-opacity-90">
-          <div className="flex gap-2">
-            {paginatedCategories.map((cat) => (
+        {/* 🔍 Search + Category Controls */}
+        <div className="absolute top-4 z-10 w-full px-4 flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-start pointer-events-none">
+          {/* Search bar (mobile only) */}
+          <input
+            type="text"
+            placeholder="Search..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="sm:hidden px-3 py-2 bg-white border rounded-md text-sm pointer-events-auto"
+          />
+
+          <div className="flex gap-1 justify-end sm:justify-start">
+            {/* Categories (floating right on md+) */}
+            {/* <div className="flex flex-col sm:flex-row md:absolute md:right-4 md:top-4 bg-opacity-90 p-2 rounded-md shadow-md gap-2 pointer-events-auto max-w-full overflow-x-auto"> */}
+            <div className="flex flex-row items-center md:absolute md:right-4 md:top-4 gap-2 bg-opacity-90 p-2 rounded-md shadow-md pointer-events-auto max-w-full overflow-x-auto">
               <button
-                key={cat}
-                onClick={() => setSelectedCategory(cat)}
-                className={`px-3 py-1 text-sm rounded-full border transition ${
-                  selectedCategory === cat
-                    ? "bg-blue-600 text-white"
-                    : "bg-white text-gray-800 border-gray-300 hover:bg-gray-100"
-                }`}>
-                {cat}
+                onClick={() => setCurrentPage((p) => p - 1)}
+                disabled={!hasPrev}
+                className="md:px-2 md:py-1 text-sm rounded-md border bg-white border-gray-300 disabled:opacity-30">
+                ◀
               </button>
-            ))}
+              <div className="flex flex-wrap gap-2">
+                {paginatedCategories.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setSelectedCategory(cat)}
+                    className={`px-3 py-1 text-sm whitespace-nowrap rounded-full border transition ${
+                      selectedCategory === cat
+                        ? "bg-blue-600 text-white"
+                        : "bg-white text-gray-800 border-gray-300 hover:bg-gray-100"
+                    }`}>
+                    {cat}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => setCurrentPage((p) => p + 1)}
+                disabled={!hasNext}
+                className="md:px-2 md:py-1 text-sm rounded-md border bg-white border-gray-300 disabled:opacity-30">
+                ▶
+              </button>
+            </div>
           </div>
-          <button
-            onClick={() => setCurrentPage((p) => p - 1)}
-            disabled={!hasPrev}
-            className="px-2 py-1 text-sm rounded-md border bg-white border-gray-300 disabled:opacity-30">
-            ◀
-          </button>
-          <button
-            onClick={() => setCurrentPage((p) => p + 1)}
-            disabled={!hasNext}
-            className="px-2 py-1 text-sm rounded-md border bg-white border-gray-300 disabled:opacity-30">
-            ▶
-          </button>
         </div>
 
         {/* 🗺 Map */}
@@ -146,7 +159,6 @@ export default function MapWithSearch() {
             zoom: 10,
           }}
           style={{ width: "100%", height: "100%" }}>
-          {/* 🧭 Zoom Control */}
           <NavigationControl position="bottom-right" showCompass={false} />
 
           {/* 📍 Markers */}
@@ -179,7 +191,7 @@ export default function MapWithSearch() {
             </Marker>
           ))}
 
-          {/* 🧾 Popup */}
+          {/* 🧾 Popup with image */}
           {selected && (
             <Popup
               longitude={selected.longitude}
@@ -189,6 +201,14 @@ export default function MapWithSearch() {
               closeOnClick={false}>
               <div className="text-sm max-w-xs space-y-1">
                 <h3 className="font-bold text-base">{selected.name}</h3>
+                <Image
+                  src={selected.image}
+                  alt={selected.name}
+                  width={200}
+                  height={120}
+                  className="rounded-md object-cover"
+                />
+                <p className="md:hidden">{selected.description}</p>
               </div>
             </Popup>
           )}
