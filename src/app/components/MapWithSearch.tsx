@@ -13,21 +13,19 @@ export default function MapWithSearch() {
   const mapRef = useRef<any>(null);
   const [locations, setLocations] = useState<any[]>([]);
   const [categories, setCategories] = useState<
-    { name: string; icon: string }[]
+    { name: string; icon: string; color: string }[]
   >([]);
+
   const [selected, setSelected] = useState<any>(null);
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(0);
   const categoriesPerPage = 4;
 
-  const pastelColor = (str: string) => {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-      hash = str.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const hue = Math.abs(hash) % 360;
-    return `hsl(${hue}, 70%, 85%)`;
+  const getCategoryColor = (categoryName: string): string => {
+    return (
+      categories.find((cat) => cat.name === categoryName)?.color || "#4B5563"
+    ); // Fallback to gray if no color found
   };
 
   const getLucideIcon = (iconName: string): JSX.Element => {
@@ -40,7 +38,7 @@ export default function MapWithSearch() {
       try {
         const [locRes, catRes] = await Promise.all([
           fetch("/api/locations"),
-          fetch("/api/categories"),
+          fetch("/api/admin/categories"),
         ]);
         const [locData, catData] = await Promise.all([
           locRes.json(),
@@ -176,7 +174,8 @@ export default function MapWithSearch() {
               <div
                 className="w-12 h-[60px] flex items-center justify-center transform hover:scale-110 transition-transform cursor-pointer border border-white rounded-full"
                 style={{
-                  backgroundColor: pastelColor(loc.category),
+                  backgroundColor: getCategoryColor(loc.category),
+
                   clipPath:
                     "path('M24 0C10.745 0 0 10.745 0 24C0 37.255 24 60 24 60C24 60 48 37.255 48 24C48 10.745 37.255 0 24 0Z')",
                   WebkitClipPath:
