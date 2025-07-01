@@ -1,14 +1,23 @@
+// app/api/admin/login/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
 export async function POST(req: NextRequest) {
   const { username, password } = await req.json();
 
-  const validUser = username === process.env.ADMIN_USERNAME;
-  const validPass = password === process.env.ADMIN_PASSWORD;
+  const isValid =
+    username === process.env.ADMIN_USERNAME &&
+    password === process.env.ADMIN_PASSWORD;
 
-  if (validUser && validPass) {
-    return NextResponse.json({ success: true });
+  if (!isValid) {
+    return NextResponse.json({ error: "Invalid credentials" }, { status: 401 });
   }
 
-  return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  const res = NextResponse.json({ message: "Authenticated" });
+  res.cookies.set("isAdminAuthed", "true", {
+    httpOnly: true,
+    path: "/",
+    maxAge: 60 * 60 * 24, // 1 day
+  });
+
+  return res;
 }
