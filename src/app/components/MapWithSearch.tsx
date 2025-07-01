@@ -1,17 +1,20 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useRef, useState, useEffect, useMemo } from "react";
+import { useRef, useState, useEffect, useMemo, JSX } from "react";
 import Map, { Marker, Popup, NavigationControl } from "react-map-gl/mapbox";
 import "mapbox-gl/dist/mapbox-gl.css";
 import { MapDetailsCard } from "./MapDetailsCard";
 import Image from "next/image";
 import Fuse from "fuse.js";
+import * as LucideIcons from "lucide-react";
 
 export default function MapWithSearch() {
   const mapRef = useRef<any>(null);
   const [locations, setLocations] = useState<any[]>([]);
-  const [categories, setCategories] = useState<string[]>(["All"]);
+  const [categories, setCategories] = useState<
+    { name: string; icon: string }[]
+  >([]);
   const [selected, setSelected] = useState<any>(null);
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
@@ -27,6 +30,11 @@ export default function MapWithSearch() {
     return `hsl(${hue}, 70%, 85%)`;
   };
 
+  const getLucideIcon = (iconName: string): JSX.Element => {
+    const Icon = (LucideIcons as any)[iconName] || LucideIcons.MapPin;
+    return <Icon className="w-6 h-6 text-white" />;
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -39,7 +47,7 @@ export default function MapWithSearch() {
           catRes.json(),
         ]);
         setLocations(locData);
-        setCategories(["All", ...catData]);
+        setCategories([{ name: "All", icon: "MapPin" }, ...catData]);
       } catch (err) {
         console.error("❌ Failed to fetch data:", err);
       }
@@ -92,7 +100,6 @@ export default function MapWithSearch() {
       </h1>
 
       <div className="w-full max-w-6xl h-[600px] relative rounded-xl overflow-hidden shadow-lg">
-        {/* 🔍 Search & Details Card (Desktop Only) */}
         <div className="hidden sm:block">
           <MapDetailsCard
             selected={selected}
@@ -103,9 +110,7 @@ export default function MapWithSearch() {
           />
         </div>
 
-        {/* 🔍 Search + Category Controls */}
         <div className="absolute top-4 z-10 w-full px-4 flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-start pointer-events-none">
-          {/* Search bar (mobile only) */}
           <input
             type="text"
             placeholder="Search..."
@@ -115,8 +120,6 @@ export default function MapWithSearch() {
           />
 
           <div className="flex gap-1 justify-end sm:justify-start">
-            {/* Categories (floating right on md+) */}
-            {/* <div className="flex flex-col sm:flex-row md:absolute md:right-4 md:top-4 bg-opacity-90 p-2 rounded-md shadow-md gap-2 pointer-events-auto max-w-full overflow-x-auto"> */}
             <div className="flex flex-row items-center md:absolute md:right-4 md:top-4 gap-2 bg-opacity-90 p-2 rounded-md shadow-md pointer-events-auto max-w-full overflow-x-auto">
               <button
                 onClick={() => setCurrentPage((p) => p - 1)}
@@ -127,14 +130,14 @@ export default function MapWithSearch() {
               <div className="flex flex-wrap gap-2">
                 {paginatedCategories.map((cat) => (
                   <button
-                    key={cat}
-                    onClick={() => setSelectedCategory(cat)}
+                    key={cat.name}
+                    onClick={() => setSelectedCategory(cat.name)}
                     className={`px-3 py-1 text-sm whitespace-nowrap rounded-full border transition ${
-                      selectedCategory === cat
+                      selectedCategory === cat.name
                         ? "bg-blue-600 text-white"
                         : "bg-white text-gray-800 border-gray-300 hover:bg-gray-100"
                     }`}>
-                    {cat}
+                    {cat.name}
                   </button>
                 ))}
               </div>
@@ -148,7 +151,6 @@ export default function MapWithSearch() {
           </div>
         </div>
 
-        {/* 🗺 Map */}
         <Map
           ref={mapRef}
           mapboxAccessToken={process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN}
@@ -161,7 +163,6 @@ export default function MapWithSearch() {
           style={{ width: "100%", height: "100%" }}>
           <NavigationControl position="bottom-right" showCompass={false} />
 
-          {/* 📍 Markers */}
           {filteredLocations.map((loc) => (
             <Marker
               key={loc.id}
@@ -173,7 +174,7 @@ export default function MapWithSearch() {
                 setSelected(loc);
               }}>
               <div
-                className="w-12 h-[60px] relative transform hover:scale-110 transition-transform cursor-pointer border border-white rounded-full overflow-hidden"
+                className="w-12 h-[60px] flex items-center justify-center transform hover:scale-110 transition-transform cursor-pointer border border-white rounded-full"
                 style={{
                   backgroundColor: pastelColor(loc.category),
                   clipPath:
@@ -181,17 +182,14 @@ export default function MapWithSearch() {
                   WebkitClipPath:
                     "path('M24 0C10.745 0 0 10.745 0 24C0 37.255 24 60 24 60C24 60 48 37.255 48 24C48 10.745 37.255 0 24 0Z')",
                 }}>
-                <Image
-                  src={loc.image}
-                  alt={loc.name}
-                  fill
-                  className="object-cover"
-                />
+                {getLucideIcon(
+                  categories.find((c) => c.name === loc.category)?.icon ||
+                    "MapPin"
+                )}
               </div>
             </Marker>
           ))}
 
-          {/* 🧾 Popup with image */}
           {selected && (
             <Popup
               longitude={selected.longitude}
