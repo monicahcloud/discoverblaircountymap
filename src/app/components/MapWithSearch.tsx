@@ -102,9 +102,9 @@ export default function MapWithSearch() {
 
   return (
     <div className="flex flex-col items-center w-full">
-      <h1 className="text-3xl font-bold mb-6 text-gray-800">
+      {/* <h1 className="text-3xl font-bold mb-6 text-gray-800">
         Explore Blair County
-      </h1>
+      </h1> */}
 
       <div className="w-full max-w-6xl h-[600px] relative rounded-xl overflow-hidden shadow-lg">
         <div className="hidden sm:block">
