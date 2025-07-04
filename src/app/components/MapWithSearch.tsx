@@ -8,6 +8,7 @@ import { MapDetailsCard } from "./MapDetailsCard";
 import Image from "next/image";
 import Fuse from "fuse.js";
 import * as LucideIcons from "lucide-react";
+import { useSearchParams } from "next/navigation";
 
 export default function MapWithSearch() {
   const mapRef = useRef<any>(null);
@@ -21,6 +22,14 @@ export default function MapWithSearch() {
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(0);
   const categoriesPerPage = 4;
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const categoryFromURL = searchParams.get("category");
+    if (categoryFromURL) {
+      setSelectedCategory(categoryFromURL);
+    }
+  }, [searchParams]);
 
   const getCategoryColor = (categoryName: string): string => {
     return (
