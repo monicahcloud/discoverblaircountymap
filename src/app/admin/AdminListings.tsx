@@ -1,6 +1,7 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useEffect, useState, ChangeEvent, FormEvent } from "react";
+import { useRef, useEffect, useState, ChangeEvent, FormEvent } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -52,9 +53,42 @@ export default function AdminListings() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
   const [searchQuery, setSearchQuery] = useState<string>("");
-
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
   const [loginForm, setLoginForm] = useState({ username: "", password: "" });
   const [loginError, setLoginError] = useState<string>("");
+  const [importResult, setImportResult] = useState<null | {
+    inserted: number;
+    errors: { row: number; message: string }[];
+  }>(null);
+
+  const openFilePicker = () => fileInputRef.current?.click();
+
+  const handleImport = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setImporting(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("/api/admin/listings/import", {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || "Import failed");
+      setImportResult(result);
+      await fetchListings();
+    } catch (err) {
+      console.error(err);
+      alert("Import failed – check console/logs for details.");
+    } finally {
+      setImporting(false);
+      e.target.value = "";
+    }
+  };
 
   const handleLogin = async () => {
     const res = await fetch("/api/admin/login", {
@@ -138,6 +172,7 @@ export default function AdminListings() {
   };
 
   const handleDelete = async (id: number) => {
+    if (!confirm("Are you sure you want to delete this listing?")) return;
     const res = await fetch("/api/admin/listings", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
@@ -187,7 +222,7 @@ export default function AdminListings() {
               }
             />
             <Input
-              //   type="password"
+              type="password"
               placeholder="Password"
               name="password"
               value={loginForm.password}
@@ -207,10 +242,51 @@ export default function AdminListings() {
 
   return (
     <main className="p-6 max-w-6xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-wrap items-center gap-2 justify-between mb-6">
         <h1 className="text-3xl font-bold">Manage Listings</h1>
-        <Button onClick={handleExportCSV}>Export CSV</Button>
+        <div className="flex gap-2">
+          <Button variant="secondary" onClick={handleExportCSV}>
+            Export CSV
+          </Button>
+          {/* <Button
+            variant="secondary"
+            onClick={() =>
+              (window.location.href = "/downloads/sample_listings.xlsx")
+            }>
+            Download XLSX Sample
+          </Button> */}
+          <Button onClick={openFilePicker} disabled={importing}>
+            {importing ? "Importing…" : "Import CSV / Excel"}
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            className="hidden"
+            onChange={handleImport}
+          />
+        </div>
       </div>
+
+      {importResult && (
+        <div className="my-4 p-4 border rounded-md bg-gray-50 text-sm">
+          ✅ {importResult.inserted} row(s) imported.
+          {importResult.errors.length > 0 && (
+            <>
+              <p className="text-red-600 mt-2 font-medium">
+                {importResult.errors.length} row(s) had errors:
+              </p>
+              <ul className="list-disc pl-6 text-red-500">
+                {importResult.errors.map((err) => (
+                  <li key={err.row}>
+                    Row {err.row}: {err.message}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+      )}
 
       <Input
         placeholder="Search by name, category, or address..."

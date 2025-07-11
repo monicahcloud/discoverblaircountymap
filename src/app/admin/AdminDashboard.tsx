@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import AdminListings from "./AdminListings";
-import AdminCategories from "./AdmingCategories";
+import AdminCategories from "./AdminCategories";
 import { Button } from "@/components/ui/button";
 
 export default function AdminDashboard() {

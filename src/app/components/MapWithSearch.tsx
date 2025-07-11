@@ -1,49 +1,51 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useRef, useState, useEffect, useMemo, JSX } from "react";
-import Map, { Marker, Popup, NavigationControl } from "react-map-gl/mapbox";
-import "mapbox-gl/dist/mapbox-gl.css";
-import { MapDetailsCard } from "./MapDetailsCard";
-import Image from "next/image";
-import Fuse from "fuse.js";
-import * as LucideIcons from "lucide-react";
-import { useSearchParams } from "next/navigation";
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
+import { useRef, useState, useEffect, useMemo } from "react";
+import Map, {
+  NavigationControl,
+  Source,
+  Layer,
+  MapRef,
+  Popup,
+} from "react-map-gl/mapbox";
+
+import type { MapLayerMouseEvent, CircleLayer, SymbolLayer } from "mapbox-gl";
+import type { FeatureCollection, Point } from "geojson";
+
+import "mapbox-gl/dist/mapbox-gl.css";
+import Fuse from "fuse.js";
+import { useSearchParams } from "next/navigation";
+import Image from "next/image";
+import { MapDetailsCard } from "./MapDetailsCard";
+
+/* ──────────────────────────── component ──────────────────────────── */
 export default function MapWithSearch() {
-  const mapRef = useRef<any>(null);
+  const mapRef = useRef<MapRef>(null);
+
+  /* ──────────────────────────── state ──────────────────────────── */
   const [locations, setLocations] = useState<any[]>([]);
   const [categories, setCategories] = useState<
     { name: string; icon: string; color: string }[]
   >([]);
-
   const [selected, setSelected] = useState<any>(null);
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(0);
   const categoriesPerPage = 4;
+
   const searchParams = useSearchParams();
 
+  /* ─────────────────── sync category from URL ─────────────────── */
   useEffect(() => {
-    const categoryFromURL = searchParams.get("category");
-    if (categoryFromURL) {
-      setSelectedCategory(categoryFromURL);
-    }
+    const catFromURL = searchParams.get("category");
+    if (catFromURL) setSelectedCategory(catFromURL);
   }, [searchParams]);
 
-  const getCategoryColor = (categoryName: string): string => {
-    return (
-      categories.find((cat) => cat.name === categoryName)?.color || "#4B5563"
-    ); // Fallback to gray if no color found
-  };
-
-  const getLucideIcon = (iconName: string): JSX.Element => {
-    const Icon = (LucideIcons as any)[iconName] || LucideIcons.MapPin;
-    return <Icon className="w-6 h-6 text-white" />;
-  };
-
+  /* ─────────────────────── fetch API data ─────────────────────── */
   useEffect(() => {
-    const fetchData = async () => {
+    (async () => {
       try {
         const [locRes, catRes] = await Promise.all([
           fetch("/api/locations"),
@@ -58,55 +60,141 @@ export default function MapWithSearch() {
       } catch (err) {
         console.error("❌ Failed to fetch data:", err);
       }
-    };
-    fetchData();
+    })();
   }, []);
 
-  const paginatedCategories = useMemo(() => {
-    return categories.slice(
-      currentPage * categoriesPerPage,
-      (currentPage + 1) * categoriesPerPage
-    );
-  }, [categories, currentPage]);
-
+  /* ────────────────── pagination for category pills ────────────── */
+  const paginatedCategories = useMemo(
+    () =>
+      categories.slice(
+        currentPage * categoriesPerPage,
+        (currentPage + 1) * categoriesPerPage
+      ),
+    [categories, currentPage]
+  );
   const hasNext = (currentPage + 1) * categoriesPerPage < categories.length;
   const hasPrev = currentPage > 0;
 
-  const fuse = useMemo(() => {
-    return new Fuse(locations, {
-      keys: ["name", "description", "address", "category"],
-      threshold: 0.3,
-    });
-  }, [locations]);
+  /* ──────────────── fuzzy search & category filter ─────────────── */
+  const fuse = useMemo(
+    () =>
+      new Fuse(locations, {
+        keys: ["name", "description", "address", "category"],
+        threshold: 0.3,
+      }),
+    [locations]
+  );
 
   const filteredLocations = useMemo(() => {
-    const matchesCategory = (loc: any) =>
+    const inCategory = (loc: any) =>
       selectedCategory === "All" || loc.category === selectedCategory;
 
-    if (searchQuery.trim() === "") {
-      return locations.filter(matchesCategory);
-    }
+    if (!searchQuery.trim()) return locations.filter(inCategory);
 
-    const fuzzyResults = fuse.search(searchQuery.trim());
-    const matchedItems = fuzzyResults.map((result) => result.item);
-    return matchedItems.filter(matchesCategory);
+    return fuse
+      .search(searchQuery.trim())
+      .map((r) => r.item)
+      .filter(inCategory);
   }, [fuse, searchQuery, selectedCategory, locations]);
 
-  const shareLocation = () => {
-    if (selected) {
-      const slug = selected.name.replace(/\s+/g, "-");
-      navigator.clipboard.writeText(`${window.location.origin}/#${slug}`);
-      alert("📍 Location link copied to clipboard!");
+  /* ───────────────────────── geojson source ────────────────────── */
+  const geoJson: FeatureCollection<Point, any> = useMemo(
+    () => ({
+      type: "FeatureCollection",
+      features: filteredLocations.map((loc) => ({
+        type: "Feature",
+        geometry: {
+          type: "Point",
+          coordinates: [loc.longitude, loc.latitude],
+        },
+        properties: { ...loc },
+      })),
+    }),
+    [filteredLocations]
+  );
+
+  /* ─────────────────────── map click handler ───────────────────── */
+  const handleMapClick = (e: MapLayerMouseEvent) => {
+    const feature = e.features?.[0];
+    if (!feature) return;
+
+    const clusterId = feature.properties?.cluster_id;
+    const map = mapRef.current?.getMap();
+    const src = map?.getSource("locations") as any;
+    if (!src) return;
+
+    if (clusterId !== undefined) {
+      src.getClusterExpansionZoom(clusterId, (err: any, zoom: number) => {
+        if (err) return;
+        const [lng, lat] = (feature.geometry as Point).coordinates;
+        map?.easeTo({
+          center: [lng, lat],
+          zoom,
+          duration: 600,
+        });
+      });
+    } else {
+      const [lng, lat] = (feature.geometry as Point).coordinates;
+      setSelected({
+        ...feature.properties,
+        longitude: lng,
+        latitude: lat,
+      });
     }
   };
 
+  /* ───────────────────── mapbox layer styles ───────────────────── */
+  const clusterLayer: CircleLayer = {
+    id: "clusters",
+    type: "circle",
+    source: "locations",
+    filter: ["has", "point_count"],
+    paint: {
+      "circle-color": "#2563eb",
+      "circle-radius": ["step", ["get", "point_count"], 16, 10, 22, 25, 28],
+      "circle-opacity": 0.85,
+    },
+  };
+
+  const clusterCountLayer: SymbolLayer = {
+    id: "cluster-count",
+    type: "symbol",
+    source: "locations",
+    filter: ["has", "point_count"],
+    layout: {
+      "text-field": "{point_count_abbreviated}",
+      "text-font": ["DIN Offc Pro Medium", "Arial Unicode MS Bold"],
+      "text-size": 12,
+    },
+    paint: { "text-color": "#fff" },
+  };
+
+  const unclusteredPointLayer: CircleLayer = {
+    id: "unclustered-point",
+    type: "circle",
+    source: "locations",
+    filter: ["!", ["has", "point_count"]],
+    paint: {
+      "circle-color": "#4b5563",
+      "circle-radius": 6,
+      "circle-stroke-width": 1,
+      "circle-stroke-color": "#fff",
+    },
+  };
+
+  /* ───────────────────────── share link ────────────────────────── */
+  const shareLocation = () => {
+    if (!selected) return;
+    const slug = selected.name.replace(/\s+/g, "-");
+    navigator.clipboard.writeText(`${window.location.origin}/#${slug}`);
+    alert("📍 Location link copied to clipboard!");
+  };
+
+  /* ─────────────────────────── render ──────────────────────────── */
   return (
     <div className="flex flex-col items-center w-full mt-10">
-      {/* <h1 className="text-3xl font-bold mb-6 text-gray-800">
-        Explore Blair County
-      </h1> */}
-
       <div className="w-full max-w-6xl h-[600px] relative rounded-xl overflow-hidden shadow-lg">
+        {/* side panel (desktop) */}
         <div className="hidden sm:block">
           <MapDetailsCard
             selected={selected}
@@ -117,6 +205,7 @@ export default function MapWithSearch() {
           />
         </div>
 
+        {/* search + category pills */}
         <div className="absolute top-4 z-10 w-full px-4 flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-start pointer-events-none">
           <input
             type="text"
@@ -134,6 +223,7 @@ export default function MapWithSearch() {
                 className="md:px-2 md:py-1 text-sm rounded-md border bg-white border-gray-300 disabled:opacity-30">
                 ◀
               </button>
+
               <div className="flex flex-wrap gap-2">
                 {paginatedCategories.map((cat) => (
                   <button
@@ -148,6 +238,7 @@ export default function MapWithSearch() {
                   </button>
                 ))}
               </div>
+
               <button
                 onClick={() => setCurrentPage((p) => p + 1)}
                 disabled={!hasNext}
@@ -158,45 +249,28 @@ export default function MapWithSearch() {
           </div>
         </div>
 
+        {/* map */}
         <Map
           ref={mapRef}
           mapboxAccessToken={process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN}
           mapStyle="mapbox://styles/mapbox/satellite-streets-v12"
-          initialViewState={{
-            latitude: 40.481,
-            longitude: -78.3486,
-            zoom: 10,
-          }}
-          style={{ width: "100%", height: "100%" }}>
+          initialViewState={{ latitude: 40.481, longitude: -78.3486, zoom: 10 }}
+          style={{ width: "100%", height: "100%" }}
+          interactiveLayerIds={["clusters", "unclustered-point"]}
+          onClick={handleMapClick}>
           <NavigationControl position="bottom-right" showCompass={false} />
 
-          {filteredLocations.map((loc) => (
-            <Marker
-              key={loc.id}
-              latitude={loc.latitude}
-              longitude={loc.longitude}
-              anchor="bottom"
-              onClick={(e) => {
-                e.originalEvent.stopPropagation();
-                setSelected(loc);
-              }}>
-              <div
-                className="w-12 h-[60px] flex items-center justify-center transform hover:scale-110 transition-transform cursor-pointer border border-white rounded-full"
-                style={{
-                  backgroundColor: getCategoryColor(loc.category),
-
-                  clipPath:
-                    "path('M24 0C10.745 0 0 10.745 0 24C0 37.255 24 60 24 60C24 60 48 37.255 48 24C48 10.745 37.255 0 24 0Z')",
-                  WebkitClipPath:
-                    "path('M24 0C10.745 0 0 10.745 0 24C0 37.255 24 60 24 60C24 60 48 37.255 48 24C48 10.745 37.255 0 24 0Z')",
-                }}>
-                {getLucideIcon(
-                  categories.find((c) => c.name === loc.category)?.icon ||
-                    "MapPin"
-                )}
-              </div>
-            </Marker>
-          ))}
+          <Source
+            id="locations"
+            type="geojson"
+            data={geoJson}
+            cluster={true}
+            clusterMaxZoom={14}
+            clusterRadius={50}>
+            <Layer {...clusterLayer} />
+            <Layer {...clusterCountLayer} />
+            <Layer {...unclusteredPointLayer} />
+          </Source>
 
           {selected && (
             <Popup

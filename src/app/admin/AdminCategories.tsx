@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, ChangeEvent, FormEvent } from "react";
+import { useEffect, useState, ChangeEvent, FormEvent, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -13,7 +13,6 @@ import {
 import { saveAs } from "file-saver";
 import { ColorPicker } from "../components/ColorPicker";
 
-// Types
 interface Category {
   id: number;
   name: string;
@@ -24,7 +23,7 @@ interface Category {
 const initialFormState: Omit<Category, "id"> = {
   name: "",
   icon: "",
-  color: "#4B5563", // default gray
+  color: "#4B5563",
 };
 
 export default function AdminCategories() {
@@ -33,6 +32,50 @@ export default function AdminCategories() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<null | {
+    inserted: number;
+    errors: { row: number; message: string }[];
+  }>(null);
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+
+  const triggerFilePicker = () => fileInputRef.current?.click();
+
+  const validateForm = (data: Omit<Category, "id">) => {
+    const errors: Record<string, string> = {};
+    if (!data.name) errors.name = "Name is required.";
+    if (!data.icon) errors.icon = "Icon is required.";
+    if (!/^#([0-9A-F]{3}){1,2}$/i.test(data.color))
+      errors.color = "Color must be a valid hex code.";
+    return errors;
+  };
+
+  const handleImport = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setImporting(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+
+      const res = await fetch("/api/admin/categories/import", {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.error || "Import failed");
+      setImportResult(result);
+      await fetchCategories();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setImporting(false);
+      e.target.value = "";
+    }
+  };
 
   useEffect(() => {
     fetchCategories();
@@ -51,6 +94,11 @@ export default function AdminCategories() {
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    const errors = validateForm(formData);
+    if (Object.keys(errors).length > 0) {
+      setFormErrors(errors);
+      return;
+    }
     const method = editingId ? "PUT" : "POST";
     const res = await fetch("/api/admin/categories", {
       method,
@@ -62,6 +110,7 @@ export default function AdminCategories() {
       setDialogOpen(false);
       setFormData(initialFormState);
       setEditingId(null);
+      setFormErrors({});
     }
   };
 
@@ -69,6 +118,7 @@ export default function AdminCategories() {
     setFormData({ name: cat.name, icon: cat.icon, color: cat.color });
     setEditingId(cat.id);
     setDialogOpen(true);
+    setFormErrors({});
   };
 
   const handleDelete = async (id: number) => {
@@ -97,10 +147,45 @@ export default function AdminCategories() {
 
   return (
     <main className="p-6 max-w-6xl mx-auto">
-      <div className="flex justify-between items-center mb-6">
+      <div className="flex flex-wrap gap-4 justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Manage Categories</h1>
-        <Button onClick={handleExportCSV}>Export CSV</Button>
+
+        <div className="flex gap-2">
+          <Button variant="secondary" onClick={handleExportCSV}>
+            Export CSV
+          </Button>
+          <Button onClick={triggerFilePicker} disabled={importing}>
+            {importing ? "Importing…" : "Import CSV / Excel"}
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            className="hidden"
+            onChange={handleImport}
+          />
+        </div>
       </div>
+
+      {importResult && (
+        <div className="my-4 p-4 border rounded-md bg-gray-50 text-sm">
+          ✅ {importResult.inserted} row(s) imported.
+          {importResult.errors.length > 0 && (
+            <>
+              <p className="text-red-600 mt-2 font-medium">
+                {importResult.errors.length} row(s) had errors:
+              </p>
+              <ul className="list-disc pl-6 text-red-500">
+                {importResult.errors.map((err) => (
+                  <li key={err.row}>
+                    Row {err.row}: {err.message}
+                  </li>
+                ))}
+              </ul>
+            </>
+          )}
+        </div>
+      )}
 
       <Input
         placeholder="Search categories..."
@@ -117,6 +202,7 @@ export default function AdminCategories() {
               setFormData(initialFormState);
               setEditingId(null);
               setDialogOpen(true);
+              setFormErrors({});
             }}>
             Add Category
           </Button>
@@ -135,10 +221,13 @@ export default function AdminCategories() {
                 value={formData.name}
                 onChange={handleChange}
               />
+              {formErrors.name && (
+                <p className="text-red-500 text-xs mt-1">{formErrors.name}</p>
+              )}
             </div>
             <div className="space-y-1">
               <Label htmlFor="icon">
-                Icon (Lucide){" "}
+                Icon (Lucide)
                 <a
                   href="https://lucide.dev/icons"
                   target="_blank"
@@ -154,6 +243,9 @@ export default function AdminCategories() {
                 onChange={handleChange}
                 placeholder="e.g. Mountain, MapPin, Star"
               />
+              {formErrors.icon && (
+                <p className="text-red-500 text-xs mt-1">{formErrors.icon}</p>
+              )}
             </div>
 
             <ColorPicker
@@ -162,6 +254,9 @@ export default function AdminCategories() {
                 setFormData((prev) => ({ ...prev, color: val }))
               }
             />
+            {formErrors.color && (
+              <p className="text-red-500 text-xs mt-1">{formErrors.color}</p>
+            )}
 
             <Button type="submit" className="mt-2">
               {editingId ? "Update" : "Add"} Category
