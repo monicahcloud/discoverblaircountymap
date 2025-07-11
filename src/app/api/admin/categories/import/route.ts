@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // ✅ API ROUTE: /api/admin/categories/import.ts
 import { NextRequest, NextResponse } from "next/server";
 import { parse as parseCsv } from "csv-parse/sync";

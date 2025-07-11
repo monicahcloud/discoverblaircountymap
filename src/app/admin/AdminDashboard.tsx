@@ -5,6 +5,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import AdminListings from "./AdminListings";
 import AdminCategories from "./AdminCategories";
 import { Button } from "@/components/ui/button";
+import ImportLogsPage from "./import_logs/page";
 
 export default function AdminDashboard() {
   const router = useRouter();
@@ -27,6 +28,7 @@ export default function AdminDashboard() {
         <TabsList>
           <TabsTrigger value="listings">Listings</TabsTrigger>
           <TabsTrigger value="categories">Categories</TabsTrigger>
+          <TabsTrigger value="import_logs">Import Logs</TabsTrigger>
         </TabsList>
 
         <TabsContent value="listings">
@@ -34,6 +36,9 @@ export default function AdminDashboard() {
         </TabsContent>
         <TabsContent value="categories">
           <AdminCategories />
+        </TabsContent>
+        <TabsContent value="import_logs">
+          <ImportLogsPage />
         </TabsContent>
       </Tabs>
     </main>
