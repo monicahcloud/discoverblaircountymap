@@ -181,7 +181,8 @@ export default function MapWithSearch() {
           ...loc,
           // color: loc.color,
           // icon: loc.icon ? loc.icon.toLowerCase() : "mappin", // fallback
-          icon: loc.category.toLowerCase(),
+          icon: loc.category.toLowerCase() || "mappin", // fallback
+          color: loc.color || "#4b5563", // fallback
         },
       })),
     }),
