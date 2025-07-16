@@ -33,7 +33,7 @@ export async function DELETE(req: Request) {
       token: process.env.BLOB_READ_WRITE_TOKEN,
     });
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true }, { status: 200 });
   } catch (err) {
     console.error("❌ Failed to delete blob:", err);
     return NextResponse.json(

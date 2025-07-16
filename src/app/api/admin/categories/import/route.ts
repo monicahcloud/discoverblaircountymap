@@ -6,7 +6,8 @@ import * as XLSX from "xlsx";
 import { Pool } from "pg";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-export const config = { runtime: "nodejs" }; // Edge runtime doesn't support Buffer
+
+export const config = { runtime: "nodejs" };
 
 type Row = { name: string; icon: string; color: string };
 

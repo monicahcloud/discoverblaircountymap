@@ -65,7 +65,7 @@ export default function AdminCategories() {
       const formData = new FormData();
       formData.append("file", file);
 
-      const res = await fetch("/api/upload-icon", {
+      const res = await fetch("/api/admin/categories/import", {
         method: "POST",
         body: formData,
       });
@@ -207,26 +207,15 @@ export default function AdminCategories() {
   };
 
   const handleDelete = async (id: number) => {
-    const category = categories.find((c) => c.id === id);
-    // const isBlob = category?.icon?.startsWith(
-    //   "https://blob.vercel-storage.com"
-    // );
-
+    if (!confirm("Are you sure you want to delete this category?")) return;
+    // const category = categories.find((c) => c.id === id);
     const res = await fetch("/api/admin/categories", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, icon: category?.icon }),
+      body: JSON.stringify({ id }),
     });
 
     if (res.ok) {
-      // if (isBlob && category?.icon) {
-      //   // Attempt to delete the file from Blob storage
-      //   await fetch("/api/upload-icon", {
-      //     method: "DELETE",
-      //     headers: { "Content-Type": "application/json" },
-      //     body: JSON.stringify({ url: category.icon }),
-      //   });
-      // }
       toast.success("Category deleted");
       await fetchCategories();
     } else {
@@ -250,7 +239,7 @@ export default function AdminCategories() {
   );
 
   return (
-    <main className="p-6 max-w-6xl mx-auto">
+    <main className="p-6 max-w-8xl mx-auto">
       <div className="flex flex-wrap gap-4 justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Manage Categories</h1>
 
@@ -274,7 +263,7 @@ export default function AdminCategories() {
       {importResult && (
         <div className="my-4 p-4 border rounded-md bg-gray-50 text-sm">
           {importResult.inserted} row(s) imported.
-          {importResult.errors.length > 0 && (
+          {importResult?.errors && importResult.errors.length > 0 && (
             <>
               <p className="text-red-600 mt-2 font-medium">
                 {importResult.errors.length} row(s) had errors:
@@ -407,25 +396,25 @@ export default function AdminCategories() {
       <table className="w-full text-sm border border-gray-300 mt-6">
         <thead className="bg-gray-100">
           <tr>
-            <th className="p-2 text-left">Name</th>
-            <th className="p-2 text-left">Icon</th>
-            <th className="p-2 text-left">Color</th>
-            <th className="p-2 text-left">Actions</th>
+            <th className="p-2 text-center">Name</th>
+            <th className="p-2 text-center">Icon</th>
+            <th className="p-2 text-center">Color</th>
+            <th className="p-2 text-center">Actions</th>
           </tr>
         </thead>
         <tbody>
           {filteredCategories.map((cat) => (
             <tr key={cat.id} className="border-t">
-              <td className="p-2 font-medium">{cat.name}</td>
-              <td className="p-2">{cat.icon}</td>
-              <td className="p-2">
+              <td className="p-10 font-medium text-center">{cat.name}</td>
+              <td className="p-5 text-center ">{cat.icon}</td>
+              <td className="p-2 text-center">
                 <span
                   className="inline-block w-4 h-4 mr-2 rounded-full"
                   style={{ backgroundColor: cat.color }}
                 />
                 {cat.color}
               </td>
-              <td className="p-2">
+              <td className="p-2 text-center">
                 <Button variant="link" onClick={() => handleEdit(cat)}>
                   Edit
                 </Button>

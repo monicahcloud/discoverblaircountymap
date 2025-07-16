@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { saveAs } from "file-saver";
 import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
 
 // Types
 type Location = {
@@ -66,6 +67,7 @@ export default function AdminListings() {
   const handleImport = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
     setImporting(true);
     try {
       const formData = new FormData();
@@ -179,6 +181,12 @@ export default function AdminListings() {
     });
     if (res.ok) {
       await fetchListings();
+    }
+    if (res.ok) {
+      toast.success("Listing deleted");
+      await fetchListings();
+    } else {
+      toast.error("Failed to delete listing.");
     }
   };
 
@@ -366,7 +374,7 @@ export default function AdminListings() {
           <tbody>
             {filteredListings.map((listing) => (
               <tr key={listing.id} className="border-t">
-                <td className="p-2 font-medium">{listing.name}</td>
+                <td className="p-2 font-medium text-center">{listing.name}</td>
                 <td className="p-2">{listing.category}</td>
                 <td className="p-2 text-sm text-muted-foreground">
                   {listing.address}
