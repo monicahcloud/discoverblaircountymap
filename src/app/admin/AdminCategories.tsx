@@ -12,6 +12,8 @@ import {
 } from "@/components/ui/dialog";
 import { saveAs } from "file-saver";
 import { ColorPicker } from "../components/ColorPicker";
+import { toast } from "sonner";
+import Image from "next/image";
 
 interface Category {
   id: number;
@@ -34,11 +36,14 @@ export default function AdminCategories() {
   const [searchQuery, setSearchQuery] = useState("");
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [importing, setImporting] = useState(false);
+  const [saving, setSaving] = useState(false);
+
   const [importResult, setImportResult] = useState<null | {
     inserted: number;
     errors: { row: number; message: string }[];
   }>(null);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [iconPreview, setIconPreview] = useState<string | null>(null);
 
   const triggerFilePicker = () => fileInputRef.current?.click();
 
@@ -60,7 +65,7 @@ export default function AdminCategories() {
       const formData = new FormData();
       formData.append("file", file);
 
-      const res = await fetch("/api/admin/categories/import", {
+      const res = await fetch("/api/upload-icon", {
         method: "POST",
         body: formData,
       });
@@ -92,27 +97,107 @@ export default function AdminCategories() {
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const result = ev.target?.result;
+      if (typeof result === "string") {
+        setIconPreview(result);
+        setFormData((prev) => ({ ...prev, icon: "" })); // Clear raw icon if file is selected
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+  const handleSVGInputChange = (e: ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value;
+    setFormData((prev) => ({ ...prev, icon: value }));
+    setIconPreview(value);
+  };
+
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const errors = validateForm(formData);
-    if (Object.keys(errors).length > 0) {
-      setFormErrors(errors);
-      return;
-    }
-    const method = editingId ? "PUT" : "POST";
-    const res = await fetch("/api/admin/categories", {
-      method,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...formData, id: editingId }),
-    });
-    if (res.ok) {
+    setSaving(true);
+    const form = new FormData(e.currentTarget);
+    const file = form.get("file") as File;
+    const name = form.get("name")?.toString() || "";
+    const color = formData.color;
+
+    let iconUrl = formData.icon;
+
+    try {
+      if (file && file.name) {
+        if (editingId) {
+          const existing = categories.find((c) => c.id === editingId);
+          const isBlob = existing?.icon?.startsWith(
+            "https://blob.vercel-storage.com"
+          );
+
+          if (isBlob && existing?.icon) {
+            await fetch("/api/upload-icon", {
+              method: "DELETE",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ url: existing.icon }),
+            });
+          }
+        }
+
+        const iconFormData = new FormData();
+        iconFormData.append("file", file);
+
+        const uploadRes = await fetch("/api/upload-icon", {
+          method: "POST",
+          body: iconFormData,
+        });
+
+        const { url } = await uploadRes.json();
+        iconUrl = url;
+      }
+
+      // ✅ Use validateForm
+      const errors = validateForm({ name, color, icon: iconUrl });
+      if (Object.keys(errors).length > 0) {
+        setFormErrors(errors);
+        return;
+      }
+      const payload = {
+        name,
+        color,
+        icon: iconUrl,
+      };
+
+      const method = editingId ? "PUT" : "POST";
+
+      const res = await fetch("/api/admin/categories", {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...payload, id: editingId }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json();
+        toast.error(data.error || "Failed to save category.");
+        return;
+      }
+
+      // On success
+      toast.success(
+        `Category ${editingId ? "updated" : "added"} successfully!`
+      );
       await fetchCategories();
-      setDialogOpen(false);
       setFormData(initialFormState);
       setEditingId(null);
       setFormErrors({});
+      setDialogOpen(false);
+    } catch (err) {
+      console.error(err);
+      toast.error("An unexpected error occurred.");
+    } finally {
+      setSaving(false); // ← Stop spinner
     }
-  };
+  }
 
   const handleEdit = (cat: Category) => {
     setFormData({ name: cat.name, icon: cat.icon, color: cat.color });
@@ -122,12 +207,30 @@ export default function AdminCategories() {
   };
 
   const handleDelete = async (id: number) => {
+    const category = categories.find((c) => c.id === id);
+    const isBlob = category?.icon?.startsWith(
+      "https://blob.vercel-storage.com"
+    );
+
     const res = await fetch("/api/admin/categories", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ id }),
     });
-    if (res.ok) await fetchCategories();
+    if (res.ok) {
+      if (isBlob && category?.icon) {
+        // Attempt to delete the file from Blob storage
+        await fetch("/api/upload-icon", {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ url: category.icon }),
+        });
+      }
+      toast.success("Category deleted");
+      await fetchCategories();
+    } else {
+      toast.error("Failed to delete category.");
+    }
   };
 
   const handleExportCSV = () => {
@@ -169,7 +272,7 @@ export default function AdminCategories() {
 
       {importResult && (
         <div className="my-4 p-4 border rounded-md bg-gray-50 text-sm">
-          ✅ {importResult.inserted} row(s) imported.
+          {importResult.inserted} row(s) imported.
           {importResult.errors.length > 0 && (
             <>
               <p className="text-red-600 mt-2 font-medium">
@@ -193,7 +296,6 @@ export default function AdminCategories() {
         value={searchQuery}
         onChange={(e) => setSearchQuery(e.target.value)}
       />
-
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogTrigger asChild>
           <Button
@@ -226,27 +328,56 @@ export default function AdminCategories() {
               )}
             </div>
             <div className="space-y-1">
-              <Label htmlFor="icon">
-                Icon (Lucide)
+              <Label htmlFor="file">Upload Icon (SVG, PNG, JSX)</Label>
+              <Input
+                id="file"
+                name="file"
+                type="file"
+                accept=".svg,.png,.jsx"
+                onChange={handleFileChange}
+              />
+              <Label htmlFor="svgInput" className="text-center mt-5">
+                Or <br /> Paste Raw SVG Code (Optional){" "}
                 <a
                   href="https://lucide.dev/icons"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-xs text-blue-600 hover:underline ml-1">
-                  (browse icons)
+                  (Browse icons)
                 </a>
+                <br />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Click an icon, then copy the SVG and paste it below.
+                </p>
               </Label>
-              <Input
-                id="icon"
+              <textarea
+                id="svgCode"
                 name="icon"
+                rows={7}
+                className="w-full p-2 border rounded-md font-mono"
                 value={formData.icon}
-                onChange={handleChange}
-                placeholder="e.g. Mountain, MapPin, Star"
+                onChange={handleSVGInputChange}
+                placeholder="<svg viewBox=...>...</svg>"
               />
-              {formErrors.icon && (
-                <p className="text-red-500 text-xs mt-1">{formErrors.icon}</p>
-              )}
             </div>
+            {iconPreview && (
+              <div className="border p-3 rounded bg-white">
+                <Label>Icon Preview</Label>
+                <div className="w-12 h-12 mt-2">
+                  {iconPreview.startsWith("<svg") ? (
+                    <div dangerouslySetInnerHTML={{ __html: iconPreview }} />
+                  ) : (
+                    <Image
+                      src={iconPreview}
+                      alt="Icon preview"
+                      width={48}
+                      height={48}
+                      className="rounded"
+                    />
+                  )}
+                </div>
+              </div>
+            )}
 
             <ColorPicker
               value={formData.color}
@@ -257,9 +388,16 @@ export default function AdminCategories() {
             {formErrors.color && (
               <p className="text-red-500 text-xs mt-1">{formErrors.color}</p>
             )}
-
-            <Button type="submit" className="mt-2">
-              {editingId ? "Update" : "Add"} Category
+            <Button type="submit" className="mt-2" disabled={saving}>
+              {saving ? (
+                <>
+                  <span className="animate-spin mr-2">⏳</span>Saving...
+                </>
+              ) : editingId ? (
+                "Update"
+              ) : (
+                "Add Category"
+              )}
             </Button>
           </form>
         </DialogContent>

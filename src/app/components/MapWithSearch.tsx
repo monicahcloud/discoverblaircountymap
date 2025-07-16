@@ -10,21 +10,66 @@ import Map, {
   MapRef,
   Popup,
 } from "react-map-gl/mapbox";
-
-import type { MapLayerMouseEvent, CircleLayer, SymbolLayer } from "mapbox-gl";
+import type { MapLayerMouseEvent } from "mapbox-gl";
 import type { FeatureCollection, Point } from "geojson";
-
 import "mapbox-gl/dist/mapbox-gl.css";
 import Fuse from "fuse.js";
 import { useSearchParams } from "next/navigation";
-import Image from "next/image";
+import NextImage from "next/image";
+
 import { MapDetailsCard } from "./MapDetailsCard";
 
-/* ──────────────────────────── component ──────────────────────────── */
+// const svgBlobToImage = async (blob: Blob): Promise<HTMLImageElement> => {
+//   return new Promise((resolve) => {
+//     const img = new Image();
+//     img.onload = () => resolve(img);
+//     img.src = URL.createObjectURL(blob);
+//   });
+// };
+
+const renderIconInCircle = async (
+  iconUrlOrSvg: string,
+  color: string
+): Promise<HTMLImageElement> => {
+  return new Promise(async (resolve) => {
+    const size = 64;
+    const canvas = document.createElement("canvas");
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext("2d")!;
+
+    // Draw colored circle background
+    ctx.beginPath();
+    ctx.arc(size / 2, size / 2, size / 2, 0, 2 * Math.PI);
+    ctx.fillStyle = color;
+    ctx.fill();
+
+    const iconImg = new Image();
+    if (iconUrlOrSvg.startsWith("<svg")) {
+      const svgBlob = new Blob([iconUrlOrSvg], { type: "image/svg+xml" });
+      iconImg.src = URL.createObjectURL(svgBlob);
+    } else {
+      iconImg.src = iconUrlOrSvg;
+    }
+
+    iconImg.onload = () => {
+      const iconSize = size * 0.5;
+      ctx.drawImage(
+        iconImg,
+        size / 2 - iconSize / 2,
+        size / 2 - iconSize / 2,
+        iconSize,
+        iconSize
+      );
+      const finalImg = new Image();
+      finalImg.onload = () => resolve(finalImg);
+      finalImg.src = canvas.toDataURL("image/png");
+    };
+  });
+};
+
 export default function MapWithSearch() {
   const mapRef = useRef<MapRef>(null);
-
-  /* ──────────────────────────── state ──────────────────────────── */
   const [locations, setLocations] = useState<any[]>([]);
   const [categories, setCategories] = useState<
     { name: string; icon: string; color: string }[]
@@ -37,13 +82,11 @@ export default function MapWithSearch() {
 
   const searchParams = useSearchParams();
 
-  /* ─────────────────── sync category from URL ─────────────────── */
   useEffect(() => {
     const catFromURL = searchParams.get("category");
     if (catFromURL) setSelectedCategory(catFromURL);
   }, [searchParams]);
 
-  /* ─────────────────────── fetch API data ─────────────────────── */
   useEffect(() => {
     (async () => {
       try {
@@ -56,14 +99,43 @@ export default function MapWithSearch() {
           catRes.json(),
         ]);
         setLocations(locData);
-        setCategories([{ name: "All", icon: "MapPin" }, ...catData]);
+        const allCats = [
+          { name: "All", icon: "MapPin", color: "#4b5563" },
+          ...catData,
+        ];
+        setCategories(allCats);
+
+        const map = mapRef.current?.getMap();
+        if (!map) return;
+        await Promise.all(
+          allCats.map(async (cat) => {
+            const id = cat.name.toLowerCase();
+            if (map.hasImage(id)) return;
+
+            let iconSource = cat.icon;
+            if (/^(https?:)?\/\//.test(cat.icon)) {
+              // Blob URL or hosted image
+              iconSource = cat.icon;
+            } else if (cat.icon.startsWith("<svg")) {
+              iconSource = cat.icon;
+            } else {
+              // Assume Lucide
+              const res = await fetch(
+                `https://api.iconify.design/lucide:${cat.icon.toLowerCase()}.svg`
+              );
+              iconSource = await res.text();
+            }
+
+            const finalImg = await renderIconInCircle(iconSource, cat.color);
+            map.addImage(id, finalImg);
+          })
+        );
       } catch (err) {
         console.error("❌ Failed to fetch data:", err);
       }
     })();
   }, []);
 
-  /* ────────────────── pagination for category pills ────────────── */
   const paginatedCategories = useMemo(
     () =>
       categories.slice(
@@ -75,7 +147,6 @@ export default function MapWithSearch() {
   const hasNext = (currentPage + 1) * categoriesPerPage < categories.length;
   const hasPrev = currentPage > 0;
 
-  /* ──────────────── fuzzy search & category filter ─────────────── */
   const fuse = useMemo(
     () =>
       new Fuse(locations, {
@@ -97,7 +168,6 @@ export default function MapWithSearch() {
       .filter(inCategory);
   }, [fuse, searchQuery, selectedCategory, locations]);
 
-  /* ───────────────────────── geojson source ────────────────────── */
   const geoJson: FeatureCollection<Point, any> = useMemo(
     () => ({
       type: "FeatureCollection",
@@ -107,13 +177,17 @@ export default function MapWithSearch() {
           type: "Point",
           coordinates: [loc.longitude, loc.latitude],
         },
-        properties: { ...loc },
+        properties: {
+          ...loc,
+          // color: loc.color,
+          // icon: loc.icon ? loc.icon.toLowerCase() : "mappin", // fallback
+          icon: loc.category.toLowerCase(),
+        },
       })),
     }),
     [filteredLocations]
   );
 
-  /* ─────────────────────── map click handler ───────────────────── */
   const handleMapClick = (e: MapLayerMouseEvent) => {
     const feature = e.features?.[0];
     if (!feature) return;
@@ -127,62 +201,14 @@ export default function MapWithSearch() {
       src.getClusterExpansionZoom(clusterId, (err: any, zoom: number) => {
         if (err) return;
         const [lng, lat] = (feature.geometry as Point).coordinates;
-        map?.easeTo({
-          center: [lng, lat],
-          zoom,
-          duration: 600,
-        });
+        map?.easeTo({ center: [lng, lat], zoom, duration: 600 });
       });
     } else {
       const [lng, lat] = (feature.geometry as Point).coordinates;
-      setSelected({
-        ...feature.properties,
-        longitude: lng,
-        latitude: lat,
-      });
+      setSelected({ ...feature.properties, longitude: lng, latitude: lat });
     }
   };
 
-  /* ───────────────────── mapbox layer styles ───────────────────── */
-  const clusterLayer: CircleLayer = {
-    id: "clusters",
-    type: "circle",
-    source: "locations",
-    filter: ["has", "point_count"],
-    paint: {
-      "circle-color": "#2563eb",
-      "circle-radius": ["step", ["get", "point_count"], 16, 10, 22, 25, 28],
-      "circle-opacity": 0.85,
-    },
-  };
-
-  const clusterCountLayer: SymbolLayer = {
-    id: "cluster-count",
-    type: "symbol",
-    source: "locations",
-    filter: ["has", "point_count"],
-    layout: {
-      "text-field": "{point_count_abbreviated}",
-      "text-font": ["DIN Offc Pro Medium", "Arial Unicode MS Bold"],
-      "text-size": 12,
-    },
-    paint: { "text-color": "#fff" },
-  };
-
-  const unclusteredPointLayer: CircleLayer = {
-    id: "unclustered-point",
-    type: "circle",
-    source: "locations",
-    filter: ["!", ["has", "point_count"]],
-    paint: {
-      "circle-color": "#4b5563",
-      "circle-radius": 6,
-      "circle-stroke-width": 1,
-      "circle-stroke-color": "#fff",
-    },
-  };
-
-  /* ───────────────────────── share link ────────────────────────── */
   const shareLocation = () => {
     if (!selected) return;
     const slug = selected.name.replace(/\s+/g, "-");
@@ -190,12 +216,10 @@ export default function MapWithSearch() {
     alert("📍 Location link copied to clipboard!");
   };
 
-  /* ─────────────────────────── render ──────────────────────────── */
   return (
     <div className="flex flex-col items-center w-full mt-10">
       <div className="w-full max-w-6xl h-[600px] relative rounded-xl overflow-hidden shadow-lg">
-        {/* side panel (desktop) */}
-        <div className="hidden sm:block">
+        <div className="sm:block">
           <MapDetailsCard
             selected={selected}
             searchQuery={searchQuery}
@@ -205,7 +229,6 @@ export default function MapWithSearch() {
           />
         </div>
 
-        {/* search + category pills */}
         <div className="absolute top-4 z-10 w-full px-4 flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-start pointer-events-none">
           <input
             type="text"
@@ -249,12 +272,15 @@ export default function MapWithSearch() {
           </div>
         </div>
 
-        {/* map */}
         <Map
           ref={mapRef}
           mapboxAccessToken={process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN}
           mapStyle="mapbox://styles/mapbox/satellite-streets-v12"
-          initialViewState={{ latitude: 40.481, longitude: -78.3486, zoom: 10 }}
+          initialViewState={{
+            latitude: 40.4531318,
+            longitude: -78.3842227,
+            zoom: 10,
+          }}
           style={{ width: "100%", height: "100%" }}
           interactiveLayerIds={["clusters", "unclustered-point"]}
           onClick={handleMapClick}>
@@ -267,9 +293,94 @@ export default function MapWithSearch() {
             cluster={true}
             clusterMaxZoom={14}
             clusterRadius={50}>
-            <Layer {...clusterLayer} />
-            <Layer {...clusterCountLayer} />
-            <Layer {...unclusteredPointLayer} />
+            <Layer
+              id="clusters"
+              type="circle"
+              filter={["has", "point_count"]}
+              paint={{
+                "circle-color": "#2563eb",
+                "circle-radius": [
+                  "step",
+                  ["get", "point_count"],
+                  16,
+                  10,
+                  22,
+                  25,
+                  28,
+                ],
+                "circle-opacity": 0.85,
+              }}
+            />
+
+            <Layer
+              id="cluster-count"
+              type="symbol"
+              filter={["has", "point_count"]}
+              layout={{
+                "text-field": "{point_count_abbreviated}",
+                "text-font": ["DIN Offc Pro Medium", "Arial Unicode MS Bold"],
+                "text-size": 14,
+              }}
+              paint={{ "text-color": "#fff" }}
+            />
+            <Layer
+              id="unclustered-color-circle"
+              type="circle"
+              filter={["!", ["has", "point_count"]]}
+              paint={{
+                "circle-color": ["get", "color"],
+                "circle-radius": [
+                  "interpolate",
+                  ["linear"],
+                  ["zoom"],
+                  10,
+                  6,
+                  14,
+                  10,
+                  17,
+                  16,
+                ],
+                "circle-opacity": 0.7,
+              }}
+            />
+
+            <Layer
+              id="unclustered-point"
+              type="symbol"
+              filter={["!", ["has", "point_count"]]}
+              layout={{
+                "icon-image": ["get", "icon"],
+                "icon-size": [
+                  "interpolate",
+                  ["linear"],
+                  ["zoom"],
+                  10,
+                  0.4,
+                  14,
+                  0.6,
+                  17,
+                  1.1,
+                ],
+                "icon-allow-overlap": true,
+                "icon-anchor": "center",
+                "text-field": [
+                  "step",
+                  ["zoom"],
+                  "", // No text at low zoom
+                  15,
+                  ["get", "name"],
+                ],
+                "text-offset": [0, 1.5],
+                "text-size": 12,
+                "text-font": ["Open Sans Bold", "Arial Unicode MS Bold"],
+              }}
+              paint={{
+                "icon-opacity": 1,
+                "text-color": ["get", "color"],
+                "text-halo-color": "#ffffff",
+                "text-halo-width": 1.2,
+              }}
+            />
           </Source>
 
           {selected && (
@@ -281,13 +392,14 @@ export default function MapWithSearch() {
               closeOnClick={false}>
               <div className="text-sm max-w-xs space-y-1">
                 <h3 className="font-bold text-base">{selected.name}</h3>
-                <Image
+                <NextImage
                   src={selected.image}
                   alt={selected.name}
                   width={200}
                   height={120}
                   className="rounded-md object-cover"
                 />
+
                 <p className="md:hidden">{selected.description}</p>
               </div>
             </Popup>
