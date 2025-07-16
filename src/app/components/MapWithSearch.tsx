@@ -17,6 +17,7 @@ import Fuse from "fuse.js";
 import { useSearchParams } from "next/navigation";
 import NextImage from "next/image";
 import { MapDetailsCard } from "./MapDetailsCard";
+import MapMobileSheet from "./MapMobileSheet";
 
 const renderIconInCircle = async (
   iconUrlOrSvg: string,
@@ -69,6 +70,8 @@ export default function MapWithSearch() {
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(0);
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
+
   const categoriesPerPage = 4;
 
   const searchParams = useSearchParams();
@@ -188,6 +191,19 @@ export default function MapWithSearch() {
     const map = mapRef.current?.getMap();
     const src = map?.getSource("locations") as any;
     if (!src) return;
+    if (!clusterId) {
+      const [lng, lat] = (feature.geometry as Point).coordinates;
+      const newSelected = {
+        ...feature.properties,
+        longitude: lng,
+        latitude: lat,
+      };
+      setSelected(newSelected);
+
+      if (window.innerWidth < 768) {
+        setIsSheetOpen(true);
+      }
+    }
 
     if (clusterId !== undefined) {
       src.getClusterExpansionZoom(clusterId, (err: any, zoom: number) => {
@@ -211,24 +227,96 @@ export default function MapWithSearch() {
   return (
     <div className="flex flex-col items-center w-full mt-10">
       <div className="w-full max-w-6xl h-[600px] relative rounded-xl overflow-hidden shadow-lg">
-        <div className="sm:block">
+        <div className="sm:hidden flex flex-wrap justify-center gap-2 px-4 py-2 z-10 absolute top-2 left-0 right-0 rounded-md shadow-md">
+          <div className="flex gap-1 justify-end sm:justify-start">
+            <div className="flex flex-row items-center md:absolute md:right-4 md:top-4 gap-2 bg-opacity-90 p-2 rounded-md shadow-md pointer-events-auto max-w-full overflow-x-auto">
+              {/* <button
+                onClick={() => {
+                  setSelectedCategory("All");
+                  setSearchQuery("");
+                  setSelected(null);
+                }}
+                className={`px-3 py-1 text-sm whitespace-nowrap rounded-full border transition ${
+                  selectedCategory === "All" && searchQuery === ""
+                    ? "bg-blue-600 text-white"
+                    : "bg-white text-gray-800 border-gray-300 hover:bg-gray-100"
+                }`}>
+                Reset Filters
+              </button> */}
+              <button
+                onClick={() => setCurrentPage((p) => p - 1)}
+                disabled={!hasPrev}
+                className="md:px-2 md:py-1 text-sm rounded-md border bg-white border-gray-300 disabled:opacity-30">
+                ◀
+              </button>
+
+              <div className="flex flex-wrap gap-2">
+                {paginatedCategories.map((cat) => (
+                  <button
+                    key={cat.name}
+                    onClick={() => {
+                      setSelectedCategory(cat.name);
+                      setSearchQuery(""); // Clear search when changing category
+                      setSelected(null);
+                    }}
+                    className={`px-3 py-1 text-sm whitespace-nowrap rounded-full border transition ${
+                      selectedCategory === cat.name
+                        ? "bg-blue-600 text-white"
+                        : "bg-white text-gray-800 border-gray-300 hover:bg-gray-100"
+                    }`}>
+                    {cat.name}
+                  </button>
+                ))}
+              </div>
+
+              <button
+                onClick={() => setCurrentPage((p) => p + 1)}
+                disabled={!hasNext}
+                className="md:px-2 md:py-1 text-sm rounded-md border bg-white border-gray-300 disabled:opacity-30">
+                ▶
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="hidden sm:block">
           <MapDetailsCard
             selected={selected}
             searchQuery={searchQuery}
             setSearchQuery={setSearchQuery}
             shareLocation={shareLocation}
             clearSelection={() => setSelected(null)}
+            mobileCategories={
+              <div className="flex flex-wrap gap-2 justify-center">
+                {paginatedCategories.map((cat) => (
+                  <button
+                    key={cat.name}
+                    onClick={() => {
+                      setSelectedCategory(cat.name);
+                      setSearchQuery("");
+                      setSelected(null);
+                    }}
+                    className={`px-3 py-1 text-sm whitespace-nowrap rounded-full border transition ${
+                      selectedCategory === cat.name
+                        ? "bg-blue-600 text-white"
+                        : "bg-white text-gray-800 border-gray-300 hover:bg-gray-100"
+                    }`}>
+                    {cat.name}
+                  </button>
+                ))}
+              </div>
+            }
           />
         </div>
 
-        <div className="absolute top-4 z-10 w-full px-4 flex flex-col gap-2 sm:flex-row sm:justify-between sm:items-start pointer-events-none">
-          <input
+        <div className="hidden sm:flex absolute top-4 left-0 right-0 z-10 px-4 flex-col gap-3 items-center sm:items-start pointer-events-none">
+          {/* <input
             type="text"
             placeholder="Search..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="sm:hidden px-3 py-2 bg-white border rounded-md text-sm pointer-events-auto"
-          />
+            className="px-3 py-2 bg-white border rounded-md text-sm pointer-events-auto"
+          /> */}
 
           <div className="flex gap-1 justify-end sm:justify-start">
             <div className="flex flex-row items-center md:absolute md:right-4 md:top-4 gap-2 bg-opacity-90 p-2 rounded-md shadow-md pointer-events-auto max-w-full overflow-x-auto">
@@ -414,6 +502,15 @@ export default function MapWithSearch() {
             </Popup>
           )}
         </Map>
+        <MapMobileSheet
+          open={isSheetOpen}
+          onClose={() => {
+            setIsSheetOpen(false);
+            setSelected(null);
+          }}
+          location={selected}
+          shareLocation={shareLocation}
+        />
       </div>
     </div>
   );

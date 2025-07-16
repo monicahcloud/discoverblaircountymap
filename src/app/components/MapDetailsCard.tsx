@@ -12,12 +12,14 @@ export function MapDetailsCard({
   setSearchQuery,
   shareLocation,
   clearSelection,
+  mobileCategories, // optional: array of mobile category buttons
 }: {
   selected: any;
   searchQuery: string;
   setSearchQuery: (val: string) => void;
   shareLocation: () => void;
   clearSelection: () => void;
+  mobileCategories?: React.ReactNode;
 }) {
   return (
     <Card className="absolute top-4 left-4 z-10 w-[360px] max-h-[500px] flex flex-col rounded-xl shadow-xl bg-white">
@@ -29,8 +31,13 @@ export function MapDetailsCard({
         </Button>
       </div>
 
-      {/* 🔍 Search Input */}
-      <div className="relative px-4 pt-2">
+      {/* 📂 Optional Mobile Category Buttons */}
+      {mobileCategories && (
+        <div className="sm:hidden px-4 pt-2">{mobileCategories}</div>
+      )}
+
+      {/* 🔍 Search Input (only visible on sm+ screens) */}
+      <div className="relative px-4 pt-2 hidden sm:block">
         <Input
           className="pr-10"
           placeholder="Search..."
@@ -68,7 +75,8 @@ export function MapDetailsCard({
               <Button variant="ghost" size="icon" asChild title="Directions">
                 <a
                   href={`https://www.google.com/maps/dir/?api=1&destination=${selected.latitude},${selected.longitude}`}
-                  target="_blank">
+                  target="_blank"
+                  rel="noopener noreferrer">
                   <Navigation className="w-5 h-5" />
                 </a>
               </Button>
@@ -87,7 +95,10 @@ export function MapDetailsCard({
 
             <div className="flex flex-col items-center gap-1">
               <Button variant="ghost" size="icon" asChild>
-                <a href={selected.website} target="_blank">
+                <a
+                  href={selected.website}
+                  target="_blank"
+                  rel="noopener noreferrer">
                   <Globe className="w-5 h-5" />
                 </a>
               </Button>
@@ -112,7 +123,6 @@ export function MapDetailsCard({
               </div>
               <div className="flex items-start gap-2 text-gray-700 text-sm">
                 <MapPin className="w-4 h-4 mt-[2px]" />
-                <hr />
                 <span className="font-semibold text-md">
                   {selected.address || "Blair County, PA"}
                 </span>

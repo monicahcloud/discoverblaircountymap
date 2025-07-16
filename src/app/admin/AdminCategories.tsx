@@ -208,24 +208,25 @@ export default function AdminCategories() {
 
   const handleDelete = async (id: number) => {
     const category = categories.find((c) => c.id === id);
-    const isBlob = category?.icon?.startsWith(
-      "https://blob.vercel-storage.com"
-    );
+    // const isBlob = category?.icon?.startsWith(
+    //   "https://blob.vercel-storage.com"
+    // );
 
     const res = await fetch("/api/admin/categories", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id }),
+      body: JSON.stringify({ id, icon: category?.icon }),
     });
+
     if (res.ok) {
-      if (isBlob && category?.icon) {
-        // Attempt to delete the file from Blob storage
-        await fetch("/api/upload-icon", {
-          method: "DELETE",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ url: category.icon }),
-        });
-      }
+      // if (isBlob && category?.icon) {
+      //   // Attempt to delete the file from Blob storage
+      //   await fetch("/api/upload-icon", {
+      //     method: "DELETE",
+      //     headers: { "Content-Type": "application/json" },
+      //     body: JSON.stringify({ url: category.icon }),
+      //   });
+      // }
       toast.success("Category deleted");
       await fetchCategories();
     } else {
