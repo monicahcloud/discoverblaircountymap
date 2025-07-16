@@ -200,6 +200,16 @@ export default function MapWithSearch() {
       };
       setSelected(newSelected);
 
+      // ✅ Fire view tracker
+      fetch("/api/track-view", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "location",
+          name: (newSelected as any).name,
+        }),
+      }).catch((err) => console.error("View tracking failed", err));
+
       if (window.innerWidth < 768) {
         setIsSheetOpen(true);
       }
@@ -230,19 +240,6 @@ export default function MapWithSearch() {
         <div className="sm:hidden flex flex-wrap justify-center gap-2 px-4 py-2 z-10 absolute top-2 left-0 right-0 rounded-md shadow-md">
           <div className="flex gap-1 justify-end sm:justify-start">
             <div className="flex flex-row items-center md:absolute md:right-4 md:top-4 gap-2 bg-opacity-90 p-2 rounded-md shadow-md pointer-events-auto max-w-full overflow-x-auto">
-              {/* <button
-                onClick={() => {
-                  setSelectedCategory("All");
-                  setSearchQuery("");
-                  setSelected(null);
-                }}
-                className={`px-3 py-1 text-sm whitespace-nowrap rounded-full border transition ${
-                  selectedCategory === "All" && searchQuery === ""
-                    ? "bg-blue-600 text-white"
-                    : "bg-white text-gray-800 border-gray-300 hover:bg-gray-100"
-                }`}>
-                Reset Filters
-              </button> */}
               <button
                 onClick={() => setCurrentPage((p) => p - 1)}
                 disabled={!hasPrev}
@@ -258,6 +255,14 @@ export default function MapWithSearch() {
                       setSelectedCategory(cat.name);
                       setSearchQuery(""); // Clear search when changing category
                       setSelected(null);
+                      fetch("/api/track-view", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          type: "category",
+                          name: cat.name,
+                        }),
+                      });
                     }}
                     className={`px-3 py-1 text-sm whitespace-nowrap rounded-full border transition ${
                       selectedCategory === cat.name
@@ -295,6 +300,14 @@ export default function MapWithSearch() {
                       setSelectedCategory(cat.name);
                       setSearchQuery("");
                       setSelected(null);
+                      fetch("/api/track-view", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          type: "category",
+                          name: cat.name,
+                        }),
+                      });
                     }}
                     className={`px-3 py-1 text-sm whitespace-nowrap rounded-full border transition ${
                       selectedCategory === cat.name
@@ -310,14 +323,6 @@ export default function MapWithSearch() {
         </div>
 
         <div className="hidden sm:flex absolute top-4 left-0 right-0 z-10 px-4 flex-col gap-3 items-center sm:items-start pointer-events-none">
-          {/* <input
-            type="text"
-            placeholder="Search..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="px-3 py-2 bg-white border rounded-md text-sm pointer-events-auto"
-          /> */}
-
           <div className="flex gap-1 justify-end sm:justify-start">
             <div className="flex flex-row items-center md:absolute md:right-4 md:top-4 gap-2 bg-opacity-90 p-2 rounded-md shadow-md pointer-events-auto max-w-full overflow-x-auto">
               <button
@@ -325,6 +330,13 @@ export default function MapWithSearch() {
                   setSelectedCategory("All");
                   setSearchQuery("");
                   setSelected(null);
+                  fetch("/api/track-view", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ type: "category", name: "All" }),
+                  }).catch((err) =>
+                    console.error("Category tracking failed", err)
+                  );
                 }}
                 className={`px-3 py-1 text-sm whitespace-nowrap rounded-full border transition ${
                   selectedCategory === "All" && searchQuery === ""
@@ -348,6 +360,16 @@ export default function MapWithSearch() {
                       setSelectedCategory(cat.name);
                       setSearchQuery(""); // Clear search when changing category
                       setSelected(null);
+                      fetch("/api/track-view", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                          type: "category",
+                          name: cat.name,
+                        }),
+                      }).catch((err) =>
+                        console.error("Category tracking failed", err)
+                      );
                     }}
                     className={`px-3 py-1 text-sm whitespace-nowrap rounded-full border transition ${
                       selectedCategory === cat.name
