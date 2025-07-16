@@ -6,7 +6,7 @@ export const dynamic = "force-dynamic";
 
 export default function Home() {
   return (
-    <main className="flex justify-center items-start min-h-screen bg-gray-100 p-4">
+    <main className="w-full min-h-screen bg-gray-100 px-5">
       <Suspense
         fallback={<div className="text-center p-4">Loading map...</div>}>
         <MapWithSearch />

@@ -225,8 +225,8 @@ export default function MapWithSearch() {
   };
 
   return (
-    <div className="flex flex-col items-center w-full mt-10">
-      <div className="w-full max-w-6xl h-[600px] relative rounded-xl overflow-hidden shadow-lg">
+    <div className="flex flex-col items-center w-full mt-10 ">
+      <div className="w-full h-[600px] relative overflow-hidden shadow-lg rounded-none sm:rounded-xl max-w-screen-2xl mx-auto">
         <div className="sm:hidden flex flex-wrap justify-center gap-2 px-4 py-2 z-10 absolute top-2 left-0 right-0 rounded-md shadow-md">
           <div className="flex gap-1 justify-end sm:justify-start">
             <div className="flex flex-row items-center md:absolute md:right-4 md:top-4 gap-2 bg-opacity-90 p-2 rounded-md shadow-md pointer-events-auto max-w-full overflow-x-auto">
