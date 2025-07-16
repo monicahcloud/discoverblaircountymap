@@ -233,6 +233,19 @@ export default function MapWithSearch() {
           <div className="flex gap-1 justify-end sm:justify-start">
             <div className="flex flex-row items-center md:absolute md:right-4 md:top-4 gap-2 bg-opacity-90 p-2 rounded-md shadow-md pointer-events-auto max-w-full overflow-x-auto">
               <button
+                onClick={() => {
+                  setSelectedCategory("All");
+                  setSearchQuery("");
+                  setSelected(null);
+                }}
+                className={`px-3 py-1 text-sm whitespace-nowrap rounded-full border transition ${
+                  selectedCategory === "All" && searchQuery === ""
+                    ? "bg-blue-600 text-white"
+                    : "bg-white text-gray-800 border-gray-300 hover:bg-gray-100"
+                }`}>
+                Reset Filters
+              </button>
+              <button
                 onClick={() => setCurrentPage((p) => p - 1)}
                 disabled={!hasPrev}
                 className="md:px-2 md:py-1 text-sm rounded-md border bg-white border-gray-300 disabled:opacity-30">
@@ -243,7 +256,11 @@ export default function MapWithSearch() {
                 {paginatedCategories.map((cat) => (
                   <button
                     key={cat.name}
-                    onClick={() => setSelectedCategory(cat.name)}
+                    onClick={() => {
+                      setSelectedCategory(cat.name);
+                      setSearchQuery(""); // Clear search when changing category
+                      setSelected(null);
+                    }}
                     className={`px-3 py-1 text-sm whitespace-nowrap rounded-full border transition ${
                       selectedCategory === cat.name
                         ? "bg-blue-600 text-white"
