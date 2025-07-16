@@ -16,16 +16,7 @@ import "mapbox-gl/dist/mapbox-gl.css";
 import Fuse from "fuse.js";
 import { useSearchParams } from "next/navigation";
 import NextImage from "next/image";
-
 import { MapDetailsCard } from "./MapDetailsCard";
-
-// const svgBlobToImage = async (blob: Blob): Promise<HTMLImageElement> => {
-//   return new Promise((resolve) => {
-//     const img = new Image();
-//     img.onload = () => resolve(img);
-//     img.src = URL.createObjectURL(blob);
-//   });
-// };
 
 const renderIconInCircle = async (
   iconUrlOrSvg: string,
