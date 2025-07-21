@@ -25,7 +25,9 @@ export default function AdminDashboard() {
         </Button>
       </div>
 
-      <Tabs defaultValue="listings" className="space-y-6">
+      <Tabs
+        defaultValue="listings"
+        className="space-y-6 justify-center items-center">
         <TabsList>
           <TabsTrigger value="listings">Listings</TabsTrigger>
           <TabsTrigger value="categories">Categories</TabsTrigger>

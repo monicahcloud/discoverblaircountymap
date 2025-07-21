@@ -37,7 +37,7 @@ export function MapDetailsCard({
       )}
 
       {/* 🔍 Search Input (only visible on sm+ screens) */}
-      <div className="relative px-4 pt-2 hidden sm:block">
+      <div className="relative px-4 hidden sm:block">
         <Input
           className="pr-10"
           placeholder="Search..."
@@ -56,6 +56,7 @@ export function MapDetailsCard({
       {/* 📜 Scrollable Content */}
       <div className="flex-1 overflow-y-auto max-h-[calc(500px-96px)]">
         {/* 📸 Location Image */}
+        <span className="font-semibold text-lg pl-2">{selected.name}</span>
         {selected && (
           <div className="w-full h-32 relative">
             <Image
