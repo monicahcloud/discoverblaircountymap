@@ -56,17 +56,20 @@ export function MapDetailsCard({
       {/* 📜 Scrollable Content */}
       <div className="flex-1 overflow-y-auto max-h-[calc(500px-96px)]">
         {/* 📸 Location Image */}
-        <span className="font-semibold text-lg pl-2">{selected.name}</span>
+
         {selected && (
-          <div className="w-full h-32 relative">
-            <Image
-              src={selected.image}
-              alt={selected.name}
-              fill
-              className="object-cover"
-              priority
-            />
-          </div>
+          <>
+            <span className="font-semibold text-lg pl-1">{selected.name}</span>
+            <div className="w-full h-32 relative">
+              <Image
+                src={selected.image}
+                alt={selected.name}
+                fill
+                className="object-cover"
+                priority
+              />
+            </div>
+          </>
         )}
 
         {/* 🎯 Action Buttons */}
