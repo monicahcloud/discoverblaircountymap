@@ -61,6 +61,7 @@ export default function AdminListings() {
     inserted: number;
     errors: { row: number; message: string }[];
   }>(null);
+  const [selectedIds, setSelectedIds] = useState<number[]>([]);
 
   const openFilePicker = () => fileInputRef.current?.click();
 
@@ -135,6 +136,19 @@ export default function AdminListings() {
       errors.longitude = "Longitude must be a number.";
     return errors;
   };
+  const toggleSelectAll = () => {
+    if (selectedIds.length === filteredListings.length) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(filteredListings.map((l) => l.id));
+    }
+  };
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]
+    );
+  };
 
   const handleChange = (
     e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -187,6 +201,31 @@ export default function AdminListings() {
       await fetchListings();
     } else {
       toast.error("Failed to delete listing.");
+    }
+  };
+  const handleBulkDelete = async () => {
+    if (selectedIds.length === 0) {
+      toast.warning("No listings selected.");
+      return;
+    }
+
+    if (!confirm(`Delete ${selectedIds.length} selected listing(s)?`)) return;
+
+    try {
+      const res = await fetch("/api/admin/listings/bulk-delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids: selectedIds }),
+      });
+
+      if (!res.ok) throw new Error("Bulk delete failed");
+
+      toast.success(`${selectedIds.length} listing(s) deleted.`);
+      setSelectedIds([]);
+      await fetchListings();
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to delete selected listings.");
     }
   };
 
@@ -357,6 +396,41 @@ export default function AdminListings() {
           </form>
         </DialogContent>
       </Dialog>
+      {/* <div className="flex justify-between items-center mb-2">
+        <Button variant="outline" onClick={toggleSelectAll} className="text-sm">
+          {selectedIds.length === filteredListings.length
+            ? "Deselect All"
+            : "Select All"}
+        </Button>
+        <p className="text-muted-foreground text-sm">
+          {selectedIds.length} selected
+        </p>
+      </div> */}
+      <div className="flex justify-between items-center mb-2">
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            onClick={toggleSelectAll}
+            className="text-sm">
+            {selectedIds.length === filteredListings.length
+              ? "Deselect All"
+              : "Select All"}
+          </Button>
+
+          {selectedIds.length > 0 && (
+            <Button
+              variant="destructive"
+              className="text-sm"
+              onClick={handleBulkDelete}>
+              Delete Selected
+            </Button>
+          )}
+        </div>
+
+        <p className="text-muted-foreground text-sm">
+          {selectedIds.length} selected
+        </p>
+      </div>
 
       {loading ? (
         <p>Loading listings...</p>
@@ -364,6 +438,13 @@ export default function AdminListings() {
         <table className="w-full text-sm border border-gray-300">
           <thead>
             <tr className="bg-gray-200">
+              <th className="p-2">
+                <input
+                  type="checkbox"
+                  checked={selectedIds.length === filteredListings.length}
+                  onChange={toggleSelectAll}
+                />
+              </th>
               <th className="text-left p-2">Name</th>
               <th className="text-left p-2">Category</th>
               <th className="text-left p-2">Address</th>
@@ -371,9 +452,17 @@ export default function AdminListings() {
               <th className="text-left p-2">Actions</th>
             </tr>
           </thead>
+
           <tbody>
             {filteredListings.map((listing) => (
               <tr key={listing.id} className="border-t">
+                <td className="p-2 text-center">
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.includes(listing.id)}
+                    onChange={() => toggleSelect(listing.id)}
+                  />
+                </td>
                 <td className="p-2 font-medium text-center">{listing.name}</td>
                 <td className="p-2">{listing.category}</td>
                 <td className="p-2 text-sm text-muted-foreground">
