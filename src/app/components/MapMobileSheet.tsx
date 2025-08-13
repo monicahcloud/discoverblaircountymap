@@ -8,9 +8,9 @@ import {
   SheetTitle,
   SheetClose,
 } from "@/components/ui/sheet";
-import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Phone, Globe, Navigation, Share2, MapPin } from "lucide-react";
+import WpImage from "@/components/WpImage";
 
 export default function MapMobileSheet({
   open,
@@ -45,10 +45,11 @@ export default function MapMobileSheet({
           {/* Image */}
           {location.image && (
             <div className="w-full h-40 relative rounded-lg overflow-hidden my-4">
-              <Image
+              <WpImage
                 src={location.image}
                 alt={location.name}
                 fill
+                sizes="(max-width: 640px) 100vw, 360px"
                 className="object-cover"
               />
             </div>

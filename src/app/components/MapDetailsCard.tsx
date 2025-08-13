@@ -5,6 +5,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Phone, Globe, Navigation, Share2, MapPin, X } from "lucide-react";
 import Image from "next/image";
 import logo from "../assets/logo.png";
+import WpImage from "@/components/WpImage";
 
 export function MapDetailsCard({
   selected,
@@ -61,12 +62,12 @@ export function MapDetailsCard({
           <>
             <span className="font-semibold text-lg pl-1">{selected.name}</span>
             <div className="w-full h-32 relative">
-              <Image
+              <WpImage
                 src={selected.image}
                 alt={selected.name}
                 fill
+                sizes="(max-width: 640px) 100vw, 360px"
                 className="object-cover"
-                priority
               />
             </div>
           </>

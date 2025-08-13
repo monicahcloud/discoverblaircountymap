@@ -15,9 +15,9 @@ import type { FeatureCollection, Point } from "geojson";
 import "mapbox-gl/dist/mapbox-gl.css";
 import Fuse from "fuse.js";
 import { useSearchParams } from "next/navigation";
-import NextImage from "next/image";
 import { MapDetailsCard } from "./MapDetailsCard";
 import MapMobileSheet from "./MapMobileSheet";
+import WpImage from "@/components/WpImage";
 
 const renderIconInCircle = async (
   iconUrlOrSvg: string,
@@ -511,14 +511,20 @@ export default function MapWithSearch() {
               closeOnClick={false}>
               <div className="text-sm max-w-xs space-y-1">
                 <h3 className="font-bold text-base">{selected.name}</h3>
-                <NextImage
+                {/* <NextImage
+                  src={selected.image}
+                  alt={selected.name}
+                  width={200}
+                  height={120}
+                  className="rounded-md object-cover"
+                /> */}
+                <WpImage
                   src={selected.image}
                   alt={selected.name}
                   width={200}
                   height={120}
                   className="rounded-md object-cover"
                 />
-
                 <p className="md:hidden">{selected.description}</p>
               </div>
             </Popup>
