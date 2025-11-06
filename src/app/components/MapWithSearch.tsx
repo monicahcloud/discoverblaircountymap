@@ -3,7 +3,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { useRef, useState, useEffect, useMemo } from "react";
-import Map, {
+import MapGL, {
   NavigationControl,
   Source,
   Layer,
@@ -18,7 +18,36 @@ import { useSearchParams } from "next/navigation";
 import { MapDetailsCard } from "./MapDetailsCard";
 import MapMobileSheet from "./MapMobileSheet";
 import WpImage from "@/components/WpImage";
+import mapboxgl from "mapbox-gl";
 
+// Convert "MapPin" or "HotelWifi" -> "map-pin", "hotel-wifi"
+const toLucideName = (name: string) =>
+  name
+    ?.trim()
+    .replace(/([a-z0-9])([A-Z])/g, "$1-$2") // camelCase/PascalCase -> kebab
+    .replace(/[_\s]+/g, "-")
+    .toLowerCase();
+
+// Simple fallback pin svg (white pin) drawn over your colored circle
+const DEFAULT_PIN_SVG = `
+<svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M12 22s8-4.5 8-10A8 8 0 1 0 4 12c0 5.5 8 10 8 10Z" />
+  <circle cx="12" cy="12" r="3" fill="white"/>
+</svg>`;
+
+type Category = { name: string; icon: string; color: string };
+
+const DEFAULT_COLOR = "#4b5563";
+
+// turn “Beer/Wine/Spirits” → “beer-wine-spirits”, stable and safe for sprite IDs
+const toSpriteId = (s: string) =>
+  s
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "") || "mappin";
+
+// draws an icon (svg/url) on a colored circle and returns an HTMLImageElement
 const renderIconInCircle = async (
   iconUrlOrSvg: string,
   color: string
@@ -30,10 +59,10 @@ const renderIconInCircle = async (
     canvas.height = size;
     const ctx = canvas.getContext("2d")!;
 
-    // Draw colored circle background
+    // Background circle
     ctx.beginPath();
     ctx.arc(size / 2, size / 2, size / 2, 0, 2 * Math.PI);
-    ctx.fillStyle = color;
+    ctx.fillStyle = color || DEFAULT_COLOR;
     ctx.fill();
 
     const iconImg = new Image();
@@ -41,6 +70,7 @@ const renderIconInCircle = async (
       const svgBlob = new Blob([iconUrlOrSvg], { type: "image/svg+xml" });
       iconImg.src = URL.createObjectURL(svgBlob);
     } else {
+      iconImg.crossOrigin = "anonymous";
       iconImg.src = iconUrlOrSvg;
     }
 
@@ -57,20 +87,25 @@ const renderIconInCircle = async (
       finalImg.onload = () => resolve(finalImg);
       finalImg.src = canvas.toDataURL("image/png");
     };
+    iconImg.onerror = () => {
+      // fallback to a plain dot if icon fetch fails
+      const finalImg = new Image();
+      finalImg.onload = () => resolve(finalImg);
+      finalImg.src = canvas.toDataURL("image/png");
+    };
   });
 };
 
 export default function MapWithSearch() {
   const mapRef = useRef<MapRef>(null);
   const [locations, setLocations] = useState<any[]>([]);
-  const [categories, setCategories] = useState<
-    { name: string; icon: string; color: string }[]
-  >([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [selected, setSelected] = useState<any>(null);
   const [selectedCategory, setSelectedCategory] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(0);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  // const [imagesReady, setImagesReady] = useState(false); // gate layer rendering
 
   const categoriesPerPage = 4;
 
@@ -81,6 +116,7 @@ export default function MapWithSearch() {
     if (catFromURL) setSelectedCategory(catFromURL);
   }, [searchParams]);
 
+  // Load data + preload map sprites from categories
   useEffect(() => {
     (async () => {
       try {
@@ -92,43 +128,67 @@ export default function MapWithSearch() {
           locRes.json(),
           catRes.json(),
         ]);
-        setLocations(locData);
-        const allCats = [
-          { name: "All", icon: "MapPin", color: "#4b5563" },
-          ...catData,
+
+        // ensure locations are objects with lat/lng parsable
+        setLocations(Array.isArray(locData) ? locData : []);
+
+        const allCats: Category[] = [
+          { name: "All", icon: "MapPin", color: DEFAULT_COLOR },
+          ...(Array.isArray(catData) ? catData : []),
         ];
         setCategories(allCats);
 
         const map = mapRef.current?.getMap();
         if (!map) return;
+
+        // add one sprite per category (skip "All" for data rendering; keep its sprite anyway for safety)
         await Promise.all(
           allCats.map(async (cat) => {
-            const id = cat.name.toLowerCase();
+            const id = toSpriteId(cat.name);
             if (map.hasImage(id)) return;
 
             let iconSource = cat.icon;
+
             if (/^(https?:)?\/\//.test(cat.icon)) {
-              // Blob URL or hosted image
+              // Hosted image URL
               iconSource = cat.icon;
             } else if (cat.icon.startsWith("<svg")) {
+              // Raw SVG string
               iconSource = cat.icon;
             } else {
-              // Assume Lucide
-              const res = await fetch(
-                `https://api.iconify.design/lucide:${cat.icon.toLowerCase()}.svg`
-              );
-              iconSource = await res.text();
+              // Treat as Lucide icon name
+              const lucideName = toLucideName(cat.icon); // helper converts MapPin → map-pin
+              try {
+                const res = await fetch(
+                  `https://api.iconify.design/lucide:${lucideName}.svg`
+                );
+                if (!res.ok) throw new Error("iconify fetch failed");
+                const svg = await res.text();
+                iconSource = svg?.trim().length ? svg : DEFAULT_PIN_SVG; // fallback if empty
+              } catch {
+                // graceful fallback to a local pin if network/iconify fails
+                iconSource = DEFAULT_PIN_SVG;
+              }
             }
 
-            const finalImg = await renderIconInCircle(iconSource, cat.color);
-            map.addImage(id, finalImg);
+            const finalImg = await renderIconInCircle(
+              iconSource,
+              cat.color || DEFAULT_COLOR
+            );
+            // Mapbox expects {width, height, data} or HTMLImageElement; GL JS 2 accepts HTMLImageElement
+            map.addImage(id, finalImg, { pixelRatio: 2 });
           })
         );
+
+        // setImagesReady(true);
       } catch (err) {
-        console.error("❌ Failed to fetch data:", err);
+        console.error("❌ Failed to initialize map data:", err);
+        // Allow map to render with fallback sprite names
+        // setImagesReady(true);
       }
     })();
   }, []);
+  // Auto-fit the map view to show all current filtered locations
 
   const paginatedCategories = useMemo(
     () =>
@@ -150,39 +210,80 @@ export default function MapWithSearch() {
     [locations]
   );
 
+  // category color lookup
+  const categoryColor = useMemo(() => {
+    const m = new globalThis.Map<string, string>(); // <-- not the React component
+    categories.forEach((c) => m.set(c.name, c.color || DEFAULT_COLOR));
+    return m;
+  }, [categories]);
+
   const filteredLocations = useMemo(() => {
     const inCategory = (loc: any) =>
       selectedCategory === "All" || loc.category === selectedCategory;
 
-    if (!searchQuery.trim()) return locations.filter(inCategory);
+    const base = searchQuery.trim()
+      ? fuse.search(searchQuery.trim()).map((r) => r.item)
+      : locations;
 
-    return fuse
-      .search(searchQuery.trim())
-      .map((r) => r.item)
-      .filter(inCategory);
+    // parse coords -> numbers; keep valid only
+    return base
+      .filter(inCategory)
+      .map((loc: any) => {
+        const lat = Number(loc.latitude);
+        const lng = Number(loc.longitude);
+        const valid = Number.isFinite(lat) && Number.isFinite(lng);
+        return { ...loc, latitude: lat, longitude: lng, __valid: valid };
+      })
+      .filter((l: any) => l.__valid);
   }, [fuse, searchQuery, selectedCategory, locations]);
 
+  // GeoJSON with safe icon id + resolved color by category
   const geoJson: FeatureCollection<Point, any> = useMemo(
     () => ({
       type: "FeatureCollection",
-      features: filteredLocations.map((loc) => ({
-        type: "Feature",
-        geometry: {
-          type: "Point",
-          coordinates: [loc.longitude, loc.latitude],
-        },
-        properties: {
-          ...loc,
-          // color: loc.color,
-          // icon: loc.icon ? loc.icon.toLowerCase() : "mappin", // fallback
-          icon: loc.category.toLowerCase() || "mappin", // fallback
-          color: loc.color || "#4b5563", // fallback
-        },
-      })),
+      features: filteredLocations.map((loc) => {
+        const catName =
+          typeof loc.category === "string" ? loc.category : "Other";
+        const iconId = toSpriteId(catName); // must match addImage id
+        const color = categoryColor.get(catName) || DEFAULT_COLOR;
+        return {
+          type: "Feature",
+          geometry: {
+            type: "Point",
+            coordinates: [loc.longitude, loc.latitude], // lng, lat (numbers now)
+          },
+          properties: {
+            ...loc,
+            icon: iconId, // used by icon-image
+            color,
+          },
+        };
+      }),
     }),
-    [filteredLocations]
+    [filteredLocations, categoryColor]
   );
+  useEffect(() => {
+    const map = mapRef.current?.getMap();
+    if (!map || filteredLocations.length === 0) return;
 
+    // Compute geographic bounds of all visible points
+    const bounds = new mapboxgl.LngLatBounds();
+    filteredLocations.forEach((loc) => {
+      const lat = Number(loc.latitude);
+      const lng = Number(loc.longitude);
+      if (Number.isFinite(lat) && Number.isFinite(lng)) {
+        bounds.extend([lng, lat]);
+      }
+    });
+
+    // Adjust zoom target depending on category
+    const isMainMap = selectedCategory === "All";
+    // const isWideOutdoor =
+    // selectedCategory === "Great Outdoors" || selectedCategory === "Ski/Snow";
+
+    map.fitBounds(bounds, { padding: 40, maxZoom: 14 });
+    if (isMainMap) map.setZoom(11);
+  }, [filteredLocations, selectedCategory]);
   const handleMapClick = (e: MapLayerMouseEvent) => {
     const feature = e.features?.[0];
     if (!feature) return;
@@ -191,29 +292,6 @@ export default function MapWithSearch() {
     const map = mapRef.current?.getMap();
     const src = map?.getSource("locations") as any;
     if (!src) return;
-    if (!clusterId) {
-      const [lng, lat] = (feature.geometry as Point).coordinates;
-      const newSelected = {
-        ...feature.properties,
-        longitude: lng,
-        latitude: lat,
-      };
-      setSelected(newSelected);
-
-      // ✅ Fire view tracker
-      fetch("/api/track-view", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: "location",
-          name: (newSelected as any).name,
-        }),
-      }).catch((err) => console.error("View tracking failed", err));
-
-      if (window.innerWidth < 768) {
-        setIsSheetOpen(true);
-      }
-    }
 
     if (clusterId !== undefined) {
       src.getClusterExpansionZoom(clusterId, (err: any, zoom: number) => {
@@ -221,22 +299,41 @@ export default function MapWithSearch() {
         const [lng, lat] = (feature.geometry as Point).coordinates;
         map?.easeTo({ center: [lng, lat], zoom, duration: 600 });
       });
-    } else {
-      const [lng, lat] = (feature.geometry as Point).coordinates;
-      setSelected({ ...feature.properties, longitude: lng, latitude: lat });
+      return;
     }
+
+    // unclustered point
+    const [lng, lat] = (feature.geometry as Point).coordinates;
+    const newSelected = {
+      ...feature.properties,
+      longitude: lng,
+      latitude: lat,
+    };
+    setSelected(newSelected);
+
+    fetch("/api/track-view", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "location",
+        name: (newSelected as any).name,
+      }),
+    }).catch((err) => console.error("View tracking failed", err));
+
+    if (window.innerWidth < 768) setIsSheetOpen(true);
   };
 
   const shareLocation = () => {
     if (!selected) return;
-    const slug = selected.name.replace(/\s+/g, "-");
+    const slug = String(selected.name || "").replace(/\s+/g, "-");
     navigator.clipboard.writeText(`${window.location.origin}/#${slug}`);
     alert("📍 Location link copied to clipboard!");
   };
 
   return (
-    <div className="flex flex-col items-center w-full mt-10 ">
+    <div className="flex flex-col items-center w-full mt-10">
       <div className="w-full h-[600px] relative overflow-hidden shadow-lg rounded-none sm:rounded-xl max-w-screen-2xl mx-auto">
+        {/* Mobile category pager */}
         <div className="sm:hidden flex flex-wrap justify-center gap-2 px-4 py-2 z-10 absolute top-2 left-0 right-0 rounded-md shadow-md">
           <div className="flex gap-1 justify-end sm:justify-start">
             <div className="flex flex-row items-center md:absolute md:right-4 md:top-4 gap-2 bg-opacity-90 p-2 rounded-md shadow-md pointer-events-auto max-w-full overflow-x-auto">
@@ -253,7 +350,7 @@ export default function MapWithSearch() {
                     key={cat.name}
                     onClick={() => {
                       setSelectedCategory(cat.name);
-                      setSearchQuery(""); // Clear search when changing category
+                      setSearchQuery("");
                       setSelected(null);
                       fetch("/api/track-view", {
                         method: "POST",
@@ -284,6 +381,7 @@ export default function MapWithSearch() {
           </div>
         </div>
 
+        {/* Search + category bar (desktop) */}
         <div className="hidden sm:block">
           <MapDetailsCard
             selected={selected}
@@ -307,7 +405,9 @@ export default function MapWithSearch() {
                           type: "category",
                           name: cat.name,
                         }),
-                      });
+                      }).catch((err) =>
+                        console.error("Category tracking failed", err)
+                      );
                     }}
                     className={`px-3 py-1 text-sm whitespace-nowrap rounded-full border transition ${
                       selectedCategory === cat.name
@@ -322,6 +422,7 @@ export default function MapWithSearch() {
           />
         </div>
 
+        {/* Top controls (desktop) */}
         <div className="hidden sm:flex absolute top-4 left-0 right-0 z-10 px-4 flex-col gap-3 items-center sm:items-start pointer-events-none">
           <div className="flex gap-1 justify-end sm:justify-start">
             <div className="flex flex-row items-center md:absolute md:right-4 md:top-4 gap-2 bg-opacity-90 p-2 rounded-md shadow-md pointer-events-auto max-w-full overflow-x-auto">
@@ -358,7 +459,7 @@ export default function MapWithSearch() {
                     key={cat.name}
                     onClick={() => {
                       setSelectedCategory(cat.name);
-                      setSearchQuery(""); // Clear search when changing category
+                      setSearchQuery("");
                       setSelected(null);
                       fetch("/api/track-view", {
                         method: "POST",
@@ -391,20 +492,21 @@ export default function MapWithSearch() {
           </div>
         </div>
 
-        <Map
+        <MapGL
           ref={mapRef}
           mapboxAccessToken={process.env.NEXT_PUBLIC_MAPBOX_ACCESS_TOKEN}
           mapStyle="mapbox://styles/mapbox/satellite-streets-v12"
           initialViewState={{
             latitude: 40.4531318,
             longitude: -78.3842227,
-            zoom: 10,
+            zoom: 9,
           }}
           style={{ width: "100%", height: "100%" }}
           interactiveLayerIds={["clusters", "unclustered-point"]}
           onClick={handleMapClick}>
           <NavigationControl position="bottom-right" showCompass={false} />
 
+          {/* Gate Source/Layers until sprites are registered, but still allow fallback rendering */}
           <Source
             id="locations"
             type="geojson"
@@ -412,6 +514,7 @@ export default function MapWithSearch() {
             cluster={true}
             clusterMaxZoom={14}
             clusterRadius={50}>
+            {/* Cluster bubbles */}
             <Layer
               id="clusters"
               type="circle"
@@ -431,6 +534,7 @@ export default function MapWithSearch() {
               }}
             />
 
+            {/* Cluster counts */}
             <Layer
               id="cluster-count"
               type="symbol"
@@ -442,12 +546,14 @@ export default function MapWithSearch() {
               }}
               paint={{ "text-color": "#fff" }}
             />
+
+            {/* Colored dot behind icon to preserve a point even if icon couldn't load */}
             <Layer
               id="unclustered-color-circle"
               type="circle"
               filter={["!", ["has", "point_count"]]}
               paint={{
-                "circle-color": ["get", "color"],
+                "circle-color": ["coalesce", ["get", "color"], DEFAULT_COLOR],
                 "circle-radius": [
                   "interpolate",
                   ["linear"],
@@ -459,43 +565,43 @@ export default function MapWithSearch() {
                   17,
                   16,
                 ],
-                "circle-opacity": 0.7,
+                "circle-opacity": 1,
               }}
             />
 
+            {/* The icon + optional label. Key bits:
+                - coalesce(icon, 'marker-15') prevents blank icon when sprite isn't ready
+                - icon-allow-overlap keeps icon visible when labels collide
+                - text-optional keeps icon even if text is dropped
+            */}
             <Layer
               id="unclustered-point"
               type="symbol"
               filter={["!", ["has", "point_count"]]}
               layout={{
-                "icon-image": ["get", "icon"],
+                "icon-image": ["coalesce", ["get", "icon"], "marker-15"],
                 "icon-size": [
                   "interpolate",
                   ["linear"],
                   ["zoom"],
                   10,
-                  0.4,
+                  0.45,
                   14,
-                  0.6,
+                  0.7,
                   17,
                   1.1,
                 ],
                 "icon-allow-overlap": true,
                 "icon-anchor": "center",
-                "text-field": [
-                  "step",
-                  ["zoom"],
-                  "", // No text at low zoom
-                  15,
-                  ["get", "name"],
-                ],
+                "text-field": ["step", ["zoom"], "", 15, ["get", "name"]],
                 "text-offset": [0, 1.5],
                 "text-size": 12,
                 "text-font": ["Open Sans Bold", "Arial Unicode MS Bold"],
+                "text-optional": true,
               }}
               paint={{
                 "icon-opacity": 1,
-                "text-color": ["get", "color"],
+                "text-color": ["coalesce", ["get", "color"], DEFAULT_COLOR],
                 "text-halo-color": "#ffffff",
                 "text-halo-width": 1.2,
               }}
@@ -511,13 +617,6 @@ export default function MapWithSearch() {
               closeOnClick={false}>
               <div className="text-sm max-w-xs space-y-1">
                 <h3 className="font-bold text-base">{selected.name}</h3>
-                {/* <NextImage
-                  src={selected.image}
-                  alt={selected.name}
-                  width={200}
-                  height={120}
-                  className="rounded-md object-cover"
-                /> */}
                 <WpImage
                   src={selected.image}
                   alt={selected.name}
@@ -529,7 +628,8 @@ export default function MapWithSearch() {
               </div>
             </Popup>
           )}
-        </Map>
+        </MapGL>
+
         <MapMobileSheet
           open={isSheetOpen}
           onClose={() => {
