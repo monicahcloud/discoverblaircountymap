@@ -19,6 +19,30 @@ import { MapDetailsCard } from "./MapDetailsCard";
 import MapMobileSheet from "./MapMobileSheet";
 import WpImage from "@/components/WpImage";
 import mapboxgl from "mapbox-gl";
+// --- Icon sizing controls (tweak here later if you want) ---
+const ICON_BASE_PX = 96; // was 64. Bigger source image = crisper & larger pin
+// const ICON_SCALE_STOPS: any[] = [
+//   "interpolate",
+//   ["linear"],
+//   ["zoom"],
+//   10,
+//   0.7, // was 0.45
+//   14,
+//   1.0, // was 0.70
+//   17,
+//   1.5, // was 1.10
+// ];
+// const CIRCLE_RADIUS_STOPS: any[] = [
+//   "interpolate",
+//   ["linear"],
+//   ["zoom"],
+//   10,
+//   9, // was 6
+//   14,
+//   14, // was 10
+//   17,
+//   22, // was 16
+// ];
 
 // Convert "MapPin" or "HotelWifi" -> "map-pin", "hotel-wifi"
 const toLucideName = (name: string) =>
@@ -53,7 +77,8 @@ const renderIconInCircle = async (
   color: string
 ): Promise<HTMLImageElement> => {
   return new Promise(async (resolve) => {
-    const size = 64;
+    // const size = 64;
+    const size = ICON_BASE_PX;
     const canvas = document.createElement("canvas");
     canvas.width = size;
     canvas.height = size;
@@ -585,12 +610,13 @@ export default function MapWithSearch() {
                   ["linear"],
                   ["zoom"],
                   10,
-                  0.45,
-                  14,
                   0.7,
+                  14,
+                  1.0,
                   17,
-                  1.1,
+                  1.5,
                 ],
+
                 "icon-allow-overlap": true,
                 "icon-anchor": "center",
                 "text-field": ["step", ["zoom"], "", 15, ["get", "name"]],

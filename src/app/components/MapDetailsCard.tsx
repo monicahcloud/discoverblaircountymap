@@ -3,8 +3,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Phone, Globe, Navigation, Share2, MapPin, X } from "lucide-react";
-import Image from "next/image";
-import logo from "../assets/logo.png";
+// import Image from "next/image";
+// import logo from "../assets/logo.png";
 import WpImage from "@/components/WpImage";
 
 export function MapDetailsCard({
@@ -12,7 +12,7 @@ export function MapDetailsCard({
   searchQuery,
   setSearchQuery,
   shareLocation,
-  clearSelection,
+  // clearSelection,
   mobileCategories, // optional: array of mobile category buttons
 }: {
   selected: any;
@@ -25,12 +25,12 @@ export function MapDetailsCard({
   return (
     <Card className="absolute top-4 left-4 z-10 w-[360px] max-h-[500px] flex flex-col rounded-xl shadow-xl bg-white">
       {/* 🔝 Top Bar */}
-      <div className="flex justify-between items-center px-4 py-2 border-b">
-        <Image src={logo} alt="Logo" width={100} height={32} />
-        <Button variant="ghost" size="icon" onClick={clearSelection}>
+      {/* <div className="flex justify-between items-center px-4  border-b"> */}
+      {/* <Image src={logo} alt="Logo" width={100} height={32} /> */}
+      {/* <Button variant="ghost" size="icon" onClick={clearSelection}>
           <X className="w-4 h-4" />
-        </Button>
-      </div>
+        </Button> */}
+      {/* </div> */}
 
       {/* 📂 Optional Mobile Category Buttons */}
       {mobileCategories && (
